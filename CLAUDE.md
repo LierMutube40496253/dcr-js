@@ -50,4 +50,4 @@ baseline, and is noted in docs/special-course/.
 - Do not change her code's behaviour without a switch that keeps her version as default.
 - Do not commit or push without asking.
 - Windows machine: Python 3.12 venv in `dcr-gymnasium-agent/python/.venv`, Node 24, Yarn 1.
-- AGENTS.md describes an earlier phase (Synthetic Review, 3 roles); ignore it.
+- AGENTS.md is a symlink to this file.

@@ -1,18 +1,22 @@
 def connect_to_dcr_environment(env_url="http://localhost:5001"):
     import requests
 
+    # One keep-alive connection for all calls (special-course): a new TCP connection
+    # per step exhausts Windows' ephemeral ports (WinError 10048) in long runs.
+    session = requests.Session()
+
     def reset():
-        r = requests.post(f"{env_url}/reset")
+        r = session.post(f"{env_url}/reset")
         r.raise_for_status()
         return r.json()
 
     def get_state():
-        r = requests.get(f"{env_url}/state")
+        r = session.get(f"{env_url}/state")
         r.raise_for_status()
         return r.json()
 
     def send_action(action):
-        r = requests.post(f"{env_url}/action", json={"action": action})
+        r = session.post(f"{env_url}/action", json={"action": action})
         r.raise_for_status()
         return r.json()
 

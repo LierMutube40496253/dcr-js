@@ -20,6 +20,7 @@ Commit dbd7c49, branch feature/cost-roles. Line numbers as of 21 Oct.
 | B4 | Experiment runner is Linux/HPC only | scripts/run_experiments.py, lines 169-171 (lsof), 265 (bash + nvm) | Fails on Windows; fine on DTU HPC |
 | B5 | One adapter = one global process state, one environment | server.ts line 30 (single env); train_agent.py line 252 (DummyVecEnv with one env) | No parallel environments; each step is an HTTP round trip (about 4.9 ms). Parallel training needs one adapter per environment on its own port |
 | B6 | Lockfile out of date; adapter relies on a package it does not list | yarn.lock; node-adapter/package.json (fast-xml-parser missing) | Install changes yarn.lock; the root yarn install must run before the adapter works |
+| B7 | Windows port exhaustion: node_connector.py opened a new TCP connection per step; fixed with a requests.Session on special-course (no behaviour change) | dcr-gymnasium-agent/python/src/utils/node_connector.py | Before the fix, 100,000-step runs on Windows crashed after a few thousand steps with WinError 10048 (16,384 ephemeral ports, closed sockets held in TIME_WAIT) |
 
 ### Understanding: thesis vs code, and thesis inconsistencies
 | # | Point | Where |
