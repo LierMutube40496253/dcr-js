@@ -1,98 +1,53 @@
-# DCR-JS — TFM Project Context
+# Special Course context (branch special-course)
 
-**Thesis:** "Multi-objective Optimisation of Business Processes via Reinforcement Learning" (DTU)
+This is a fork of Sofía Ortiz-Arce Prada's master thesis code ("Multi-objective Optimisation
+of Business Processes via Reinforcement Learning: A Shielded Reinforcement Learning Approach
+over Declarative DCR Models", DTU 2026). Her final code is branch `feature/cost-roles`,
+commit dbd7c49. This branch, `special-course`, is where the DTU special course work happens.
+Supervisor: Hugo A. López (DTU Compute).
 
-## Methodology
+## Goal of the special course
+- Study 1: measure where her PPO agent stops scaling (works at 42 actions, collapses between
+  42 and 60), add action masking, compare other algorithms (MaskablePPO, DQN, A2C, tabular
+  where feasible), state abstraction and factored actions, always keeping 100% valid traces.
+- Study 2: a next-activity recommender that starts from a running case (a prefix of events)
+  instead of the initial marking, under the same DCR guarantees.
+- First step: reproduce her results unchanged (Expense Report, Loan Application).
 
-- DCR graphs extended with cost/duration per event (EDCR model, Diaz et al. DEC2H 2023)
-- PPO agent (Stable Baselines 3), scalarized reward: `r = r_structural - α·cost - β·duration`
-- Weight sweep over 6 (α,β) pairs: (0,0), (1,0), (0,1), (0.5,0.5), (2,0.5), (0.5,2)
-- Post-training: extract Pareto front from accepting episode traces
-- Reference: Diaz et al. use CSP+COP in MiniZinc — this thesis uses RL as a scalable alternative
+## How the code is organised
+- `dcr-engine/src/` (TypeScript): DCR semantics (`executionEngine.ts`), RL environment and the
+  interception shield (`generation.ts`, class `RLDCREnvironment`), reward (`reward.ts`).
+- `node-adapter/src/server.ts`: HTTP server on port 5001 used by the Python agent. Decodes
+  action index -> (event, role), applies role multipliers, step penalty, step limit, Expert
+  budget gate, calls the reward. Run with `node dist/server.mjs` (prebuilt bundle).
+- `dcr-gymnasium-agent/python/src/envs/dcr_env.py`: Gymnasium environment (observation = 3
+  bits per event: included, executed, pending).
+- `dcr-gymnasium-agent/python/src/agents/train_agent.py`: PPO training (SB3 defaults).
+- `dcr-gymnasium-agent/python/scripts/run_experiments.py`: her batch runner. Linux/HPC only
+  (bash, nvm, lsof). On Windows use `scripts/run_local.py` (ours).
+- Graphs: `app/public/examples/diagrams/` (Expense_Report_Diaz.xml, LoanApp_junior_senior.xml,
+  Mined_*.xml).
 
-## Branch Structure
+## Settings that must match the thesis (otherwise results differ)
+Engine environment variables: MAX_EPISODE_STEPS=300, STEP_PENALTY=-1.5, COST_WEIGHT=alpha,
+DURATION_WEIGHT=epsilon, EXPERT_BUDGET_K=k (unset = unlimited), DCR_XML=absolute path.
+Training: --steps 100000 --ent-coef 0.1 --seed N. Weight pairs (alpha, epsilon): (0,0), (1,0),
+(0,1), (0.5,0.5), (2,0.5), (0.5,2). Run ids: `<Base>_s<seed>_a<alpha>_b<eps>_k<k|unlim>` with
+dots as `p` (e.g. ExpenseReport_Diaz_s1_a1p0_b0p0_kunlim) so her analysis scripts parse them.
+Statistics use the accepting episodes of the final 20% of training.
 
-- `feature/cost-duration-ui` — cost/duration UI fields + RL training pipeline (proven Pareto results)
-- `feature/cost-roles` — extends action space to (event × role); branched from cost-duration-ui
+## Known issues in her code (details: docs/special-course/CODE_ISSUES_AND_CHANGES.md)
+- A1: the step that reaches acceptance gets a flat +100; its cost and duration are ignored.
+- A2: hitting the step limit is returned as terminated, never truncated.
+- A3: after 100 legal steps the engine's internal limit marks the episode accepting (+100)
+  even with events pending.
+- B1: the Expert budget is not reflected in the action mask.
+- The mask is computed every step but never used by the agent (her design: interception).
+Do not fix these silently: every fix goes behind a switch so her behaviour stays the default
+baseline, and is noted in docs/special-course/.
 
-## Main Test Graph — Synthetic Review (X51)
-
-14 events, L_min=11, 4118 trace variants. Cost/duration design (v2):
-
-| Event | cost | duration |
-|---|---|---|
-| get review 1 | 80 | 5 (expensive, fast) |
-| get review 2/3 | 0 | 60 (free, slow) |
-| get review X | 0 | 90 |
-| time-out 1/2/3/X | 5 | 90 |
-| invite reviewers | 10 | 5 |
-| collect reviews | 10 | 10 |
-| decide | 20 | 15 |
-| accept/reject | 0 | 5 |
-
-**Graph selection rule:** only use graphs with L_min ≥ 5. Graphs with L_min=1 produce trivial acceptance (no real trade-off). Mined DCR graphs from event logs have empty pendingResponses → trivial acceptance.
-
-## Roles Extension (feature/cost-roles)
-
-Action space expanded to **event × role** pairs. Each event has 3 role options with different cost/duration profiles:
-
-| Role | Profile | Semantic |
-|---|---|---|
-| Expert | high cost, low duration | skilled human resource |
-| Junior | low cost, high duration | less experienced human |
-| System | lowest cost, medium duration | automated / software |
-
-- XML format: `<roleOptions><role name="Expert" cost="80" duration="3"/>...</roleOptions>` per event
-- Action space: 14 events × 3 roles = **42 actions** (observation stays 14×3 per-event state)
-- Backward compatible: graphs without `<roleOptions>` use flat `<cost>`/`<duration>` as before
-- Test graph: `app/public/examples/diagrams/Synthetic_review_roles.xml`
-- Pending with professor: confirm Option B (agent picks role) is correct direction before training
-
-Key files changed:
-- `dcr-engine/src/types.ts` — `roleOptionsMap` field on DCRGraphS
-- `dcr-engine/src/graphConversion.ts` — parses `<roleOptions>` from XML
-- `node-adapter/src/server.ts` — decodes action index → (event, role), role-specific cost/duration
-- `dcr-gymnasium-agent/.../dcr_env.py` — `action_space = Discrete(n_events × n_roles)`
-- `dcr-gymnasium-agent/.../train_agent.py` — logs `action_role` column in CSV
-
-## Current Results (Synthetic Review v2, feature/cost-duration-ui)
-
-2 Pareto points, both from α=0.0 β=1.0 (pure duration minimiser):
-- `cost=35, duration=325, steps=8` — uses time-out path (free reviewers)
-- `cost=110, duration=145, steps=6` — uses get review 1 (fast expensive reviewer)
-
-Trade-off confirmed: paying +75 cost saves 180 duration.
-Breakeven is below (0.5, 0.5) — duration savings dominate at equal weights.
-Baseline (α=0,β=0) is not Pareto-optimal: dominated by both points.
-
-## Analysis Notebook
-
-`dcr-gymnasium-agent/python/scripts/analysis.ipynb`
-
-| Cell | ID | Content |
-|---|---|---|
-| 1 | 8432db60 | imports, `load_data`, COLORS config — set `LOGS_DIR` |
-| 2 | fda2550d | summary table: accept_rate, cost_final, duration_final per weight pair |
-| 3 | 765da72c | `plot_reward_normalized` — X axis 0–100% training progress |
-| 4 | fc64bdf4 | `box_last_20pct` — box plots cost/duration, last 20% of episodes |
-| 5 | b5eaecc4 | Pareto scatter — `find_convergence_timestep`, excludes baseline |
-| 6 | 9dd1ae2e | `load_episode_sequence` — step-by-step event sequences for Pareto traces |
-
-Key analysis decisions:
-- Exclude baseline (α=0,β=0) from Pareto computation — trivially short paths dominate
-- `find_convergence_timestep` uses rolling std/mean ratio with window=500, threshold=0.05
-- Logs path on local Mac: `/Users/sofia/Desktop/synthetic_review_logs`
-
-## Infrastructure
-
-- **HPC cluster:** `s252277@login.hpc.dtu.dk` — training runs, logs in `~/dcr-js/.../scripts/logs/`
-- **SSH tunnel:** port 5001, connects browser → cluster node adapter
-- **Node adapter:** `node-adapter/src/server.ts`, `/load` endpoint persists XML to `staging/current_graph.xml`
-- **Modeler UI:** robot button sends current graph to node adapter via POST /load
-- **Remotes:** `origin` = hugoalopez-dtu/dcr-js (no push access), `mine` = Sofiaortizarce/dcr-js
-- **Active branch:** `feature/cost-roles`
-- **Cluster git tip:** set `GIT_TMPDIR=/tmp` before git pull (disk nearly full)
-
-## Thesis Framing
-
-Contribution: (1) DCR modeler extended with cost/duration UI, (2) reward shaping for multi-objective RL, (3) empirical evaluation on Synthetic Review showing RL+scalarization finds Pareto trade-offs when graph structure allows it, (4) role-conditioned action space extending the EDCR model — agent discovers optimal resource allocation strategies as part of Pareto optimisation.
+## Working rules
+- Do not change her code's behaviour without a switch that keeps her version as default.
+- Do not commit or push without asking.
+- Windows machine: Python 3.12 venv in `dcr-gymnasium-agent/python/.venv`, Node 24, Yarn 1.
+- AGENTS.md describes an earlier phase (Synthetic Review, 3 roles); ignore it.
