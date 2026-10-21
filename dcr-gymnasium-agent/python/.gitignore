@@ -3,4 +3,4 @@ __pycache__/
 *.pyc
 dcr_tensorboard/
 ppo_dcr_model.zip
-.DS_Store
+.DS_Storescripts/logs/sweep_*.out
