@@ -13,6 +13,7 @@ Example (from anywhere):
 """
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -24,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[3]  # repo root
 NODE_ADAPTER_DIR = ROOT / "node-adapter"
 PYTHON_PROJECT_DIR = Path(__file__).resolve().parents[1]
 LOGS_DIR = PYTHON_PROJECT_DIR / "scripts" / "logs"
+TB_DIR = PYTHON_PROJECT_DIR / "dcr_tensorboard"  # train_agent.py default
 
 
 def parse_pairs(raw: str) -> list[tuple[float, float]]:
@@ -81,7 +83,11 @@ def stop_process(proc: subprocess.Popen):
 def run_one(args, xml: Path, seed: int, alpha: float, eps: float) -> bool:
     exp_id = make_exp_id(args.base, seed, alpha, eps, args.k)
     node_url = f"http://localhost:{args.port}"
-    run_log = LOGS_DIR / f"run_{exp_id}.log"
+    # With --fast-io the chatty run log and TensorBoard files are written on a fast local
+    # disk and copied into the repo afterwards (WSL: many small writes to /mnt/c are ~10x slower)
+    work_dir = args.fast_io if args.fast_io else LOGS_DIR
+    run_log = work_dir / f"run_{exp_id}.log"
+    tb_dir = args.fast_io / "dcr_tensorboard" if args.fast_io else None
 
     start = datetime.now()
     print(f"[RUN] {exp_id} | start {start:%Y-%m-%d %H:%M:%S} | alpha={alpha} eps={eps} "
@@ -132,6 +138,8 @@ def run_one(args, xml: Path, seed: int, alpha: float, eps: float) -> bool:
                     "--seed", str(seed),
                     "--node-url", node_url,
                 ]
+                if args.fast_io:
+                    train_cmd += ["--tb-log-dir", str(tb_dir)]
                 print("Launching trainer:", " ".join(train_cmd), flush=True)
                 ret = subprocess.run(
                     train_cmd,
@@ -148,6 +156,12 @@ def run_one(args, xml: Path, seed: int, alpha: float, eps: float) -> bool:
             print(f"[ERROR] {exp_id}: {e}", flush=True)
         finally:
             stop_process(proc)
+
+    if args.fast_io:
+        shutil.copy2(run_log, LOGS_DIR / run_log.name)
+        for d in tb_dir.glob(f"exp_{exp_id}_*"):
+            shutil.copytree(d, TB_DIR / d.name, dirs_exist_ok=True)
+        run_log = LOGS_DIR / run_log.name
 
     end = datetime.now()
     status = "OK" if ok else "FAILED"
@@ -170,8 +184,14 @@ def main():
     parser.add_argument("--step-penalty", type=float, default=-1.5)
     parser.add_argument("--port", type=int, default=5001)
     parser.add_argument("--k", type=int, default=None, help="Expert budget (omit = unlimited)")
+    parser.add_argument("--fast-io", type=Path, default=None,
+                        help="write run logs and TensorBoard here first, copy into the repo "
+                             "after each run (use a Linux path such as ~/dcr_io under WSL)")
     args = parser.parse_args()
 
+    if args.fast_io:
+        args.fast_io = args.fast_io.expanduser().resolve()
+        args.fast_io.mkdir(parents=True, exist_ok=True)
     xml = args.graph.expanduser().resolve()
     if not xml.exists():
         sys.exit(f"XML not found: {xml}")
