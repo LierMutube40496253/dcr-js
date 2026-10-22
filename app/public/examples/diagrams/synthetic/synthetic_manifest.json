@@ -1,0 +1,102 @@
+[
+  {
+    "graph": "Synthetic_chain_20",
+    "events": 20,
+    "num_relations_generator": 78,
+    "num_relations_distinct": 75,
+    "by_type_generator": {
+      "condition": 29,
+      "response": 29,
+      "exclude": 14,
+      "include": 6
+    },
+    "by_type_distinct": {
+      "condition": 27,
+      "response": 28,
+      "exclude": 14,
+      "include": 6
+    },
+    "seed": 1,
+    "noise_density": 2.0
+  },
+  {
+    "graph": "Synthetic_chain_40",
+    "events": 40,
+    "num_relations_generator": 158,
+    "num_relations_distinct": 157,
+    "by_type_generator": {
+      "condition": 59,
+      "response": 59,
+      "exclude": 28,
+      "include": 12
+    },
+    "by_type_distinct": {
+      "condition": 59,
+      "response": 58,
+      "exclude": 28,
+      "include": 12
+    },
+    "seed": 1,
+    "noise_density": 2.0
+  },
+  {
+    "graph": "Synthetic_chain_60",
+    "events": 60,
+    "num_relations_generator": 238,
+    "num_relations_distinct": 235,
+    "by_type_generator": {
+      "condition": 89,
+      "response": 89,
+      "exclude": 42,
+      "include": 18
+    },
+    "by_type_distinct": {
+      "condition": 88,
+      "response": 88,
+      "exclude": 41,
+      "include": 18
+    },
+    "seed": 1,
+    "noise_density": 2.0
+  },
+  {
+    "graph": "Synthetic_chain_80",
+    "events": 80,
+    "num_relations_generator": 318,
+    "num_relations_distinct": 315,
+    "by_type_generator": {
+      "condition": 119,
+      "response": 119,
+      "exclude": 56,
+      "include": 24
+    },
+    "by_type_distinct": {
+      "condition": 117,
+      "response": 118,
+      "exclude": 56,
+      "include": 24
+    },
+    "seed": 1,
+    "noise_density": 2.0
+  },
+  {
+    "graph": "Synthetic_chain_100",
+    "events": 100,
+    "num_relations_generator": 398,
+    "num_relations_distinct": 392,
+    "by_type_generator": {
+      "condition": 149,
+      "response": 149,
+      "exclude": 70,
+      "include": 30
+    },
+    "by_type_distinct": {
+      "condition": 146,
+      "response": 147,
+      "exclude": 69,
+      "include": 30
+    },
+    "seed": 1,
+    "noise_density": 2.0
+  }
+]

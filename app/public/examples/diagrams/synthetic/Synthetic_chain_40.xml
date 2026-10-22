@@ -1,0 +1,300 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<dcrgraph title="Synthetic chain+noise 40 events (seed 1, noise 2.0), E1.3 reconstruction">
+  <specification>
+    <resources>
+      <events>
+        <event id="Event_1"></event>
+        <event id="Event_2"></event>
+        <event id="Event_3"></event>
+        <event id="Event_4"></event>
+        <event id="Event_5"></event>
+        <event id="Event_6"></event>
+        <event id="Event_7"></event>
+        <event id="Event_8"></event>
+        <event id="Event_9"></event>
+        <event id="Event_10"></event>
+        <event id="Event_11"></event>
+        <event id="Event_12"></event>
+        <event id="Event_13"></event>
+        <event id="Event_14"></event>
+        <event id="Event_15"></event>
+        <event id="Event_16"></event>
+        <event id="Event_17"></event>
+        <event id="Event_18"></event>
+        <event id="Event_19"></event>
+        <event id="Event_20"></event>
+        <event id="Event_21"></event>
+        <event id="Event_22"></event>
+        <event id="Event_23"></event>
+        <event id="Event_24"></event>
+        <event id="Event_25"></event>
+        <event id="Event_26"></event>
+        <event id="Event_27"></event>
+        <event id="Event_28"></event>
+        <event id="Event_29"></event>
+        <event id="Event_30"></event>
+        <event id="Event_31"></event>
+        <event id="Event_32"></event>
+        <event id="Event_33"></event>
+        <event id="Event_34"></event>
+        <event id="Event_35"></event>
+        <event id="Event_36"></event>
+        <event id="Event_37"></event>
+        <event id="Event_38"></event>
+        <event id="Event_39"></event>
+        <event id="Event_40"></event>
+      </events>
+      <labels>
+        <label id="Act_Event_1"/>
+        <label id="Act_Event_2"/>
+        <label id="Act_Event_3"/>
+        <label id="Act_Event_4"/>
+        <label id="Act_Event_5"/>
+        <label id="Act_Event_6"/>
+        <label id="Act_Event_7"/>
+        <label id="Act_Event_8"/>
+        <label id="Act_Event_9"/>
+        <label id="Act_Event_10"/>
+        <label id="Act_Event_11"/>
+        <label id="Act_Event_12"/>
+        <label id="Act_Event_13"/>
+        <label id="Act_Event_14"/>
+        <label id="Act_Event_15"/>
+        <label id="Act_Event_16"/>
+        <label id="Act_Event_17"/>
+        <label id="Act_Event_18"/>
+        <label id="Act_Event_19"/>
+        <label id="Act_Event_20"/>
+        <label id="Act_Event_21"/>
+        <label id="Act_Event_22"/>
+        <label id="Act_Event_23"/>
+        <label id="Act_Event_24"/>
+        <label id="Act_Event_25"/>
+        <label id="Act_Event_26"/>
+        <label id="Act_Event_27"/>
+        <label id="Act_Event_28"/>
+        <label id="Act_Event_29"/>
+        <label id="Act_Event_30"/>
+        <label id="Act_Event_31"/>
+        <label id="Act_Event_32"/>
+        <label id="Act_Event_33"/>
+        <label id="Act_Event_34"/>
+        <label id="Act_Event_35"/>
+        <label id="Act_Event_36"/>
+        <label id="Act_Event_37"/>
+        <label id="Act_Event_38"/>
+        <label id="Act_Event_39"/>
+        <label id="Act_Event_40"/>
+      </labels>
+      <labelMappings>
+        <labelMapping eventId="Event_1" labelId="Act_Event_1"/>
+        <labelMapping eventId="Event_2" labelId="Act_Event_2"/>
+        <labelMapping eventId="Event_3" labelId="Act_Event_3"/>
+        <labelMapping eventId="Event_4" labelId="Act_Event_4"/>
+        <labelMapping eventId="Event_5" labelId="Act_Event_5"/>
+        <labelMapping eventId="Event_6" labelId="Act_Event_6"/>
+        <labelMapping eventId="Event_7" labelId="Act_Event_7"/>
+        <labelMapping eventId="Event_8" labelId="Act_Event_8"/>
+        <labelMapping eventId="Event_9" labelId="Act_Event_9"/>
+        <labelMapping eventId="Event_10" labelId="Act_Event_10"/>
+        <labelMapping eventId="Event_11" labelId="Act_Event_11"/>
+        <labelMapping eventId="Event_12" labelId="Act_Event_12"/>
+        <labelMapping eventId="Event_13" labelId="Act_Event_13"/>
+        <labelMapping eventId="Event_14" labelId="Act_Event_14"/>
+        <labelMapping eventId="Event_15" labelId="Act_Event_15"/>
+        <labelMapping eventId="Event_16" labelId="Act_Event_16"/>
+        <labelMapping eventId="Event_17" labelId="Act_Event_17"/>
+        <labelMapping eventId="Event_18" labelId="Act_Event_18"/>
+        <labelMapping eventId="Event_19" labelId="Act_Event_19"/>
+        <labelMapping eventId="Event_20" labelId="Act_Event_20"/>
+        <labelMapping eventId="Event_21" labelId="Act_Event_21"/>
+        <labelMapping eventId="Event_22" labelId="Act_Event_22"/>
+        <labelMapping eventId="Event_23" labelId="Act_Event_23"/>
+        <labelMapping eventId="Event_24" labelId="Act_Event_24"/>
+        <labelMapping eventId="Event_25" labelId="Act_Event_25"/>
+        <labelMapping eventId="Event_26" labelId="Act_Event_26"/>
+        <labelMapping eventId="Event_27" labelId="Act_Event_27"/>
+        <labelMapping eventId="Event_28" labelId="Act_Event_28"/>
+        <labelMapping eventId="Event_29" labelId="Act_Event_29"/>
+        <labelMapping eventId="Event_30" labelId="Act_Event_30"/>
+        <labelMapping eventId="Event_31" labelId="Act_Event_31"/>
+        <labelMapping eventId="Event_32" labelId="Act_Event_32"/>
+        <labelMapping eventId="Event_33" labelId="Act_Event_33"/>
+        <labelMapping eventId="Event_34" labelId="Act_Event_34"/>
+        <labelMapping eventId="Event_35" labelId="Act_Event_35"/>
+        <labelMapping eventId="Event_36" labelId="Act_Event_36"/>
+        <labelMapping eventId="Event_37" labelId="Act_Event_37"/>
+        <labelMapping eventId="Event_38" labelId="Act_Event_38"/>
+        <labelMapping eventId="Event_39" labelId="Act_Event_39"/>
+        <labelMapping eventId="Event_40" labelId="Act_Event_40"/>
+      </labelMappings>
+    </resources>
+    <constraints>
+      <conditions>
+        <condition sourceId="Event_1" targetId="Event_2"/>
+        <condition sourceId="Event_2" targetId="Event_3"/>
+        <condition sourceId="Event_3" targetId="Event_4"/>
+        <condition sourceId="Event_4" targetId="Event_5"/>
+        <condition sourceId="Event_5" targetId="Event_6"/>
+        <condition sourceId="Event_6" targetId="Event_7"/>
+        <condition sourceId="Event_7" targetId="Event_8"/>
+        <condition sourceId="Event_8" targetId="Event_9"/>
+        <condition sourceId="Event_9" targetId="Event_10"/>
+        <condition sourceId="Event_10" targetId="Event_11"/>
+        <condition sourceId="Event_11" targetId="Event_12"/>
+        <condition sourceId="Event_12" targetId="Event_13"/>
+        <condition sourceId="Event_13" targetId="Event_14"/>
+        <condition sourceId="Event_14" targetId="Event_15"/>
+        <condition sourceId="Event_15" targetId="Event_16"/>
+        <condition sourceId="Event_16" targetId="Event_17"/>
+        <condition sourceId="Event_17" targetId="Event_18"/>
+        <condition sourceId="Event_18" targetId="Event_19"/>
+        <condition sourceId="Event_19" targetId="Event_20"/>
+        <condition sourceId="Event_20" targetId="Event_21"/>
+        <condition sourceId="Event_21" targetId="Event_22"/>
+        <condition sourceId="Event_22" targetId="Event_23"/>
+        <condition sourceId="Event_23" targetId="Event_24"/>
+        <condition sourceId="Event_24" targetId="Event_25"/>
+        <condition sourceId="Event_25" targetId="Event_26"/>
+        <condition sourceId="Event_26" targetId="Event_27"/>
+        <condition sourceId="Event_27" targetId="Event_28"/>
+        <condition sourceId="Event_28" targetId="Event_29"/>
+        <condition sourceId="Event_29" targetId="Event_30"/>
+        <condition sourceId="Event_30" targetId="Event_31"/>
+        <condition sourceId="Event_31" targetId="Event_32"/>
+        <condition sourceId="Event_32" targetId="Event_33"/>
+        <condition sourceId="Event_33" targetId="Event_34"/>
+        <condition sourceId="Event_34" targetId="Event_35"/>
+        <condition sourceId="Event_35" targetId="Event_36"/>
+        <condition sourceId="Event_36" targetId="Event_37"/>
+        <condition sourceId="Event_37" targetId="Event_38"/>
+        <condition sourceId="Event_38" targetId="Event_39"/>
+        <condition sourceId="Event_39" targetId="Event_40"/>
+        <condition sourceId="Event_9" targetId="Event_37"/>
+        <condition sourceId="Event_5" targetId="Event_17"/>
+        <condition sourceId="Event_8" targetId="Event_32"/>
+        <condition sourceId="Event_29" targetId="Event_31"/>
+        <condition sourceId="Event_14" targetId="Event_25"/>
+        <condition sourceId="Event_7" targetId="Event_32"/>
+        <condition sourceId="Event_2" targetId="Event_25"/>
+        <condition sourceId="Event_28" targetId="Event_39"/>
+        <condition sourceId="Event_1" targetId="Event_29"/>
+        <condition sourceId="Event_15" targetId="Event_18"/>
+        <condition sourceId="Event_7" targetId="Event_38"/>
+        <condition sourceId="Event_2" targetId="Event_21"/>
+        <condition sourceId="Event_2" targetId="Event_35"/>
+        <condition sourceId="Event_1" targetId="Event_25"/>
+        <condition sourceId="Event_14" targetId="Event_28"/>
+        <condition sourceId="Event_2" targetId="Event_34"/>
+        <condition sourceId="Event_15" targetId="Event_29"/>
+        <condition sourceId="Event_32" targetId="Event_36"/>
+        <condition sourceId="Event_15" targetId="Event_23"/>
+        <condition sourceId="Event_15" targetId="Event_30"/>
+      </conditions>
+      <responses>
+        <response sourceId="Event_1" targetId="Event_2"/>
+        <response sourceId="Event_2" targetId="Event_3"/>
+        <response sourceId="Event_3" targetId="Event_4"/>
+        <response sourceId="Event_4" targetId="Event_5"/>
+        <response sourceId="Event_5" targetId="Event_6"/>
+        <response sourceId="Event_6" targetId="Event_7"/>
+        <response sourceId="Event_7" targetId="Event_8"/>
+        <response sourceId="Event_8" targetId="Event_9"/>
+        <response sourceId="Event_9" targetId="Event_10"/>
+        <response sourceId="Event_10" targetId="Event_11"/>
+        <response sourceId="Event_11" targetId="Event_12"/>
+        <response sourceId="Event_12" targetId="Event_13"/>
+        <response sourceId="Event_13" targetId="Event_14"/>
+        <response sourceId="Event_14" targetId="Event_15"/>
+        <response sourceId="Event_15" targetId="Event_16"/>
+        <response sourceId="Event_16" targetId="Event_17"/>
+        <response sourceId="Event_17" targetId="Event_18"/>
+        <response sourceId="Event_18" targetId="Event_19"/>
+        <response sourceId="Event_19" targetId="Event_20"/>
+        <response sourceId="Event_20" targetId="Event_21"/>
+        <response sourceId="Event_21" targetId="Event_22"/>
+        <response sourceId="Event_22" targetId="Event_23"/>
+        <response sourceId="Event_23" targetId="Event_24"/>
+        <response sourceId="Event_24" targetId="Event_25"/>
+        <response sourceId="Event_25" targetId="Event_26"/>
+        <response sourceId="Event_26" targetId="Event_27"/>
+        <response sourceId="Event_27" targetId="Event_28"/>
+        <response sourceId="Event_28" targetId="Event_29"/>
+        <response sourceId="Event_29" targetId="Event_30"/>
+        <response sourceId="Event_30" targetId="Event_31"/>
+        <response sourceId="Event_31" targetId="Event_32"/>
+        <response sourceId="Event_32" targetId="Event_33"/>
+        <response sourceId="Event_33" targetId="Event_34"/>
+        <response sourceId="Event_34" targetId="Event_35"/>
+        <response sourceId="Event_35" targetId="Event_36"/>
+        <response sourceId="Event_36" targetId="Event_37"/>
+        <response sourceId="Event_37" targetId="Event_38"/>
+        <response sourceId="Event_38" targetId="Event_39"/>
+        <response sourceId="Event_39" targetId="Event_40"/>
+        <response sourceId="Event_19" targetId="Event_2"/>
+        <response sourceId="Event_27" targetId="Event_36"/>
+        <response sourceId="Event_7" targetId="Event_12"/>
+        <response sourceId="Event_19" targetId="Event_8"/>
+        <response sourceId="Event_22" targetId="Event_33"/>
+        <response sourceId="Event_28" targetId="Event_33"/>
+        <response sourceId="Event_13" targetId="Event_20"/>
+        <response sourceId="Event_19" targetId="Event_38"/>
+        <response sourceId="Event_26" targetId="Event_38"/>
+        <response sourceId="Event_3" targetId="Event_31"/>
+        <response sourceId="Event_16" targetId="Event_26"/>
+        <response sourceId="Event_27" targetId="Event_12"/>
+        <response sourceId="Event_24" targetId="Event_36"/>
+        <response sourceId="Event_24" targetId="Event_6"/>
+        <response sourceId="Event_29" targetId="Event_33"/>
+        <response sourceId="Event_7" targetId="Event_11"/>
+        <response sourceId="Event_34" targetId="Event_26"/>
+        <response sourceId="Event_24" targetId="Event_32"/>
+        <response sourceId="Event_2" targetId="Event_31"/>
+      </responses>
+      <excludes>
+        <exclude sourceId="Event_1" targetId="Event_25"/>
+        <exclude sourceId="Event_33" targetId="Event_9"/>
+        <exclude sourceId="Event_34" targetId="Event_36"/>
+        <exclude sourceId="Event_14" targetId="Event_28"/>
+        <exclude sourceId="Event_4" targetId="Event_31"/>
+        <exclude sourceId="Event_24" targetId="Event_37"/>
+        <exclude sourceId="Event_36" targetId="Event_13"/>
+        <exclude sourceId="Event_33" targetId="Event_27"/>
+        <exclude sourceId="Event_32" targetId="Event_23"/>
+        <exclude sourceId="Event_27" targetId="Event_23"/>
+        <exclude sourceId="Event_1" targetId="Event_35"/>
+        <exclude sourceId="Event_35" targetId="Event_40"/>
+        <exclude sourceId="Event_40" targetId="Event_22"/>
+        <exclude sourceId="Event_30" targetId="Event_39"/>
+        <exclude sourceId="Event_2" targetId="Event_15"/>
+        <exclude sourceId="Event_12" targetId="Event_36"/>
+        <exclude sourceId="Event_38" targetId="Event_12"/>
+        <exclude sourceId="Event_6" targetId="Event_36"/>
+        <exclude sourceId="Event_17" targetId="Event_3"/>
+        <exclude sourceId="Event_5" targetId="Event_6"/>
+        <exclude sourceId="Event_2" targetId="Event_29"/>
+        <exclude sourceId="Event_1" targetId="Event_18"/>
+        <exclude sourceId="Event_16" targetId="Event_18"/>
+        <exclude sourceId="Event_8" targetId="Event_40"/>
+        <exclude sourceId="Event_12" targetId="Event_23"/>
+        <exclude sourceId="Event_19" targetId="Event_5"/>
+        <exclude sourceId="Event_11" targetId="Event_11"/>
+        <exclude sourceId="Event_17" targetId="Event_34"/>
+      </excludes>
+      <includes>
+        <include sourceId="Event_3" targetId="Event_20"/>
+        <include sourceId="Event_40" targetId="Event_38"/>
+        <include sourceId="Event_38" targetId="Event_26"/>
+        <include sourceId="Event_11" targetId="Event_11"/>
+        <include sourceId="Event_33" targetId="Event_15"/>
+        <include sourceId="Event_1" targetId="Event_13"/>
+        <include sourceId="Event_35" targetId="Event_36"/>
+        <include sourceId="Event_15" targetId="Event_26"/>
+        <include sourceId="Event_33" targetId="Event_23"/>
+        <include sourceId="Event_37" targetId="Event_23"/>
+        <include sourceId="Event_30" targetId="Event_18"/>
+        <include sourceId="Event_36" targetId="Event_39"/>
+      </includes>
+    </constraints>
+  </specification>
+</dcrgraph>
