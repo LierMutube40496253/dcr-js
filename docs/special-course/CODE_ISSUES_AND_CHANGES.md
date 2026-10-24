@@ -8,14 +8,14 @@ Commit dbd7c49, branch feature/cost-roles. Line numbers as of 21 Oct.
 | # | Issue | Location | Effect | Status |
 | --- | --- | --- | --- | --- |
 | A1 | Final step's cost and duration never enter the reward (flat +100) | dcr-engine/src/reward.ts, computeStepReward, lines 54-58 | Expense Report: ...Approve>PayOut (cost 50) and ...Approve>Withdraw (cost 735) get identical reward under every weight pair. Explains Table 6.3 (median cost 735 for the cost-focused agent) | Confirmed by replay, 21 Oct |
-| A2 | Hitting the step limit is reported as a normal end (terminated), never as truncated | dcr-gymnasium-agent/python/src/envs/dcr_env.py, step(), line 116 | Value estimates learn "nothing more to earn" at the cut-off. Small for her (about 100% acceptance); large on big graphs where most episodes hit the limit (graph 09: all of them) | Read in code; thesis 9.5 admits it |
-| A3 | After 100 legal steps the episode is marked accepting and gets +100, even though the process is not finished | dcr-engine/src/generation.ts, RLDCREnvironment.step (done = accepting OR currentStep >= maxSteps, maxSteps defaults to 100); node-adapter/src/server.ts line 30 (created without maxSteps) and the /action route (structuralAccepting = result.done) | Replay 21 Oct: Expense Report, FillOut 100 times: step 100 gives +100, accepting=True, with 2 events still pending. Inflates acceptance rates and rewards looping early in training. How often it happened in her runs is unknown: check logs for accepting episodes with pendingAfter > 0 | Confirmed by replay, 21 Oct |
+| A2 | Hitting the step limit is reported as a normal end (terminated), never as truncated | dcr-gymnasium-agent/python/src/envs/dcr_env.py, step(), line 116 | Value estimates learn "nothing more to earn" at the cut-off. Small for her (about 100% acceptance); large on big graphs where most episodes hit the limit (graph 09: all of them) | Read in code; thesis 9.5 admits it. **Fixed behind a switch** (`--truncation-fix`), 24 Oct; test d |
+| A3 | After 100 legal steps the episode is marked accepting and gets +100, even though the process is not finished | dcr-engine/src/generation.ts, RLDCREnvironment.step (done = accepting OR currentStep >= maxSteps, maxSteps defaults to 100); node-adapter/src/server.ts line 30 (created without maxSteps) and the /action route (structuralAccepting = result.done) | Replay 21 Oct: Expense Report, FillOut 100 times: step 100 gives +100, accepting=True, with 2 events still pending. Inflates acceptance rates and rewards looping early in training. How often it happened in her runs is unknown: check logs for accepting episodes with pendingAfter > 0 | Confirmed by replay, 21 Oct. **Fixed behind a switch** (`FIX_FALSE_ACCEPT=1`), 24 Oct; test b. Note: the fix also requires that the action executed, since a blocked action leaves an initially accepting marking (e.g. LoanApp_junior_senior) unchanged |
 
 ### Medium: traps for your experiments
 | # | Issue | Location | Effect |
 | --- | --- | --- | --- |
-| B1 | Expert budget not in the action mask (deliberate) | node-adapter/src/server.ts, BUDGET GATE lines 185-230; buildActionMask line 87 | A masked agent can still pick Expert with no budget left and be blocked at -10 |
-| B2 | Python fallback mask marks pending events, not enabled ones, and has one entry per event instead of per (event, role) | dcr_env.py, state_to_mask line 25; used at lines 62, 82, 95 | Never runs with her adapter; wrong if it ever does |
+| B1 | Expert budget not in the action mask (deliberate) | node-adapter/src/server.ts, BUDGET GATE lines 185-230; buildActionMask line 87 | A masked agent can still pick Expert with no budget left and be blocked at -10. **Fixed behind a switch** (`BUDGET_IN_MASK=1`), 24 Oct; test c (without it, a masked agent on LoanApp k=1 was blocked in 31% of training steps) |
+| B2 | Python fallback mask marks pending events, not enabled ones, and has one entry per event instead of per (event, role) | dcr_env.py, state_to_mask line 25; used at lines 62, 82, 95 | Never runs with her adapter; wrong if it ever does. Left as is; the new `action_masks()` never uses it and raises an error if the adapter mask is missing or has the wrong length |
 | B3 | Defaults differ from the thesis settings | server.ts lines 33-34 (100 steps, -0.1); train_agent.py lines 284, 296 (30,000 steps, entropy 0.01) | Running by hand without her runner gives different results. Thesis: 300 steps, -1.5, 100,000 steps, entropy 0.1 |
 | B4 | Experiment runner is Linux/HPC only | scripts/run_experiments.py, lines 169-171 (lsof), 265 (bash + nvm) | Fails on Windows; fine on DTU HPC |
 | B5 | One adapter = one global process state, one environment | server.ts line 30 (single env); train_agent.py line 252 (DummyVecEnv with one env) | No parallel environments; each step is an HTTP round trip (about 4.9 ms). Parallel training needs one adapter per environment on its own port |
@@ -33,6 +33,18 @@ Commit dbd7c49, branch feature/cost-roles. Line numbers as of 21 Oct.
 | C6 | "Collapse beyond ~42 event-role pairs": 42 is the largest size that worked; the break is between 42 and 60 | Abstract, 9.5, 10.4 vs 8.3.1-8.3.2 |
 | C7 | AGENTS.md (written by Sofía, commits of 22-23 Jun) describes an older setup (Synthetic Review, 3 roles, 42 actions); the final runner uses Loan Application with 2 roles | AGENTS.md vs run_experiments.py line 75 |
 | C8 | Loan Application log is simulated (AgentSimulator), not a real company log | Thesis 5.2.2 |
+
+## Switches added (24 Oct, all off by default; tests in TESTS.md)
+
+| Switch | Fixes | Files |
+| --- | --- | --- |
+| `FIX_FALSE_ACCEPT=1` (adapter env; `run_local.py --fix-false-accept`) | A3 | node-adapter/src/server.ts (/action), dist/server.mjs rebuilt |
+| `--truncation-fix` (`train_agent.py`, `run_local.py`) | A2 | dcr_env.py step(), train_agent.py |
+| `BUDGET_IN_MASK=1` (adapter env; `run_local.py --budget-in-mask`) | B1 | node-adapter/src/server.ts buildActionMask |
+| `--algo maskable_ppo` (`train_agent.py`, `run_local.py`) | masking (replaces B2 for masked runs) | dcr_env.py action_masks(), train_agent.py; sb3-contrib 2.7.1 in requirements.txt |
+
+With all switches off, a 2,048-step run is identical row for row to commit fe01d1c (test a).
+A run with any switch on gets a tag in its id (`masked`, `fixA2A3B1`, ...).
 
 ## B. Functions to change during the special course
 
