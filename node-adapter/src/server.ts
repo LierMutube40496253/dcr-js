@@ -9,6 +9,7 @@ import fs from "fs";
 import { xmlToDCR } from "../../dcr-engine/src/graphConversion.js";
 import { RLDCREnvironment } from "../../dcr-engine/src/generation.js";
 import { computeStepReward, countPendingIncluded } from "../../dcr-engine/src/reward.js";
+import { isAcceptingS } from "../../dcr-engine/src/executionEngine.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -40,6 +41,13 @@ const DURATION_WEIGHT = Number(process.env.DURATION_WEIGHT || 0);
 const _kRaw = process.env.EXPERT_BUDGET_K;
 const EXPERT_BUDGET_K: number | null =
   !_kRaw || _kRaw === "none" ? null : Number(_kRaw);
+
+// Special-course switches, OFF by default (off = Sofía's behaviour).
+// FIX_FALSE_ACCEPT=1 (issue A3): accepting only when the executed step reaches a real DCR
+//   accepting marking (isAcceptingS); the engine's 100-legal-step limit no longer ends episodes.
+// BUDGET_IN_MASK=1 (issue B1): Expert pairs are masked out once the Expert budget is used up.
+const FIX_FALSE_ACCEPT = process.env.FIX_FALSE_ACCEPT === "1";
+const BUDGET_IN_MASK   = process.env.BUDGET_IN_MASK === "1";
 
 const executedInEpisode = new Set<string>();
 // Tracks which pending events have been resolved at least once this episode.
@@ -86,7 +94,8 @@ const getEventRolePairs = (): Array<{ event: string; role: string }> => {
 // Mask: 1 for every (event, role) pair where the event is a valid action.
 const buildActionMask = (pairs: Array<{ event: string; role: string }>, validActions: string[]) => {
   const set = new Set(validActions || []);
-  return pairs.map(p => (set.has(p.event) ? 1 : 0));
+  const expertBlocked = BUDGET_IN_MASK && EXPERT_BUDGET_K !== null && expertBudgetRemaining === 0;
+  return pairs.map(p => (set.has(p.event) && !(expertBlocked && p.role === "Expert") ? 1 : 0));
 };
 
 const getState = () =>
@@ -234,7 +243,12 @@ app.post("/action", (req, res) => {
     const label = graph.labelMap[action] || action;
 
     // Structural acceptance: Pending ∩ Included = ∅
-    const structuralAccepting = Boolean(result.done);
+    // Her version takes the engine's done flag, which is also true after 100 legal steps (A3).
+    // With FIX_FALSE_ACCEPT: the action must have executed (blocked actions leave the marking
+    // unchanged, which may itself be accepting) and the new marking must really accept.
+    const structuralAccepting = FIX_FALSE_ACCEPT
+      ? Boolean(result.info?.compliant || process.env.SHIELD_DISABLED === "1") && isAcceptingS(graph, graph)
+      : Boolean(result.done);
     const goalReached = GOAL_LABEL.length > 0 && label === GOAL_LABEL;
     const accepting = STRICT_GOAL_TERMINATION
       ? (structuralAccepting && goalReached)
@@ -391,4 +405,6 @@ app.listen(PORT, () => {
   console.log(`GOAL_LABEL:                ${GOAL_LABEL || "<none>"}`);
   console.log(`STRICT_GOAL_TERMINATION:   ${STRICT_GOAL_TERMINATION}`);
   console.log(`Termination:               ${STRICT_GOAL_TERMINATION ? "goal + structural" : "structural (Pending ∩ Included = ∅)"}`);
+  console.log(`FIX_FALSE_ACCEPT:          ${FIX_FALSE_ACCEPT}`);
+  console.log(`BUDGET_IN_MASK:            ${BUDGET_IN_MASK}`);
 });

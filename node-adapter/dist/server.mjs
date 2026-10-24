@@ -366,6 +366,8 @@ var COST_WEIGHT = Number(process.env.COST_WEIGHT || 0);
 var DURATION_WEIGHT = Number(process.env.DURATION_WEIGHT || 0);
 var _kRaw = process.env.EXPERT_BUDGET_K;
 var EXPERT_BUDGET_K = !_kRaw || _kRaw === "none" ? null : Number(_kRaw);
+var FIX_FALSE_ACCEPT = process.env.FIX_FALSE_ACCEPT === "1";
+var BUDGET_IN_MASK = process.env.BUDGET_IN_MASK === "1";
 var executedInEpisode = /* @__PURE__ */ new Set();
 var firstResolvedInEpisode = /* @__PURE__ */ new Set();
 var lastResult = null;
@@ -396,7 +398,8 @@ var getEventRolePairs = () => {
 };
 var buildActionMask = (pairs, validActions) => {
   const set = new Set(validActions || []);
-  return pairs.map((p) => set.has(p.event) ? 1 : 0);
+  const expertBlocked = BUDGET_IN_MASK && EXPERT_BUDGET_K !== null && expertBudgetRemaining === 0;
+  return pairs.map((p) => set.has(p.event) && !(expertBlocked && p.role === "Expert") ? 1 : 0);
 };
 var getState = () => env.getState ? env.getState() : {
   included: [...graph.marking.included],
@@ -529,7 +532,7 @@ app.post("/action", (req, res) => {
     }
     const result = env.step(action);
     const label = graph.labelMap[action] || action;
-    const structuralAccepting = Boolean(result.done);
+    const structuralAccepting = FIX_FALSE_ACCEPT ? Boolean(result.info?.compliant || process.env.SHIELD_DISABLED === "1") && isAcceptingS(graph, graph) : Boolean(result.done);
     const goalReached = GOAL_LABEL.length > 0 && label === GOAL_LABEL;
     const accepting = STRICT_GOAL_TERMINATION ? structuralAccepting && goalReached : structuralAccepting;
     const rewardInput = { ...result, accepting, done: accepting, stateBefore };
@@ -647,4 +650,6 @@ app.listen(PORT, () => {
   console.log(`GOAL_LABEL:                ${GOAL_LABEL || "<none>"}`);
   console.log(`STRICT_GOAL_TERMINATION:   ${STRICT_GOAL_TERMINATION}`);
   console.log(`Termination:               ${STRICT_GOAL_TERMINATION ? "goal + structural" : "structural (Pending \u2229 Included = \u2205)"}`);
+  console.log(`FIX_FALSE_ACCEPT:          ${FIX_FALSE_ACCEPT}`);
+  console.log(`BUDGET_IN_MASK:            ${BUDGET_IN_MASK}`);
 });

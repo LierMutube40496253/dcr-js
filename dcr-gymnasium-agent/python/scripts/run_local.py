@@ -43,10 +43,22 @@ def parse_seeds(raw: str) -> list[int]:
     return [int(s.strip()) for s in raw.split(",") if s.strip()]
 
 
-def make_exp_id(base: str, seed: int, alpha: float, eps: float, k) -> str:
-    # Same format as run_experiments.py
+def switch_tag(args) -> str:
+    """Short tag for the special-course switches, '' when all are off (her baseline).
+    e.g. masked_fixA2A3B1 = MaskablePPO + truncation fix + false-accept fix + budget in mask."""
+    parts = ["masked"] if args.algo == "maskable_ppo" else []
+    fixes = "".join(code for code, on in (("A2", args.truncation_fix), ("A3", args.fix_false_accept),
+                                          ("B1", args.budget_in_mask)) if on)
+    if fixes:
+        parts.append(f"fix{fixes}")
+    return "_".join(parts)
+
+
+def make_exp_id(base: str, seed: int, alpha: float, eps: float, k, tag: str = "") -> str:
+    # Same format as run_experiments.py; the switch tag goes into the base name
     weight_tag = f"a{float(alpha)}_b{float(eps)}".replace(".", "p")
     k_tag = "kunlim" if k is None else f"k{k}"
+    base = f"{base}_{tag}" if tag else base
     return f"{base}_s{seed}_{weight_tag}_{k_tag}"
 
 
@@ -81,7 +93,7 @@ def stop_process(proc: subprocess.Popen):
 
 
 def run_one(args, xml: Path, seed: int, alpha: float, eps: float) -> bool:
-    exp_id = make_exp_id(args.base, seed, alpha, eps, args.k)
+    exp_id = make_exp_id(args.base, seed, alpha, eps, args.k, switch_tag(args))
     node_url = f"http://localhost:{args.port}"
     # With --fast-io the chatty run log and TensorBoard files are written on a fast local
     # disk and copied into the repo afterwards (WSL: many small writes to /mnt/c are ~10x slower)
@@ -108,6 +120,11 @@ def run_one(args, xml: Path, seed: int, alpha: float, eps: float) -> bool:
     env.pop("EXPERT_BUDGET_K", None)
     if args.k is not None:
         env["EXPERT_BUDGET_K"] = str(args.k)
+    # Special-course adapter switches: set only when on, so off = her environment exactly
+    for name, on in (("FIX_FALSE_ACCEPT", args.fix_false_accept), ("BUDGET_IN_MASK", args.budget_in_mask)):
+        env.pop(name, None)
+        if on:
+            env[name] = "1"
     # Unbuffered UTF-8 output so the log is live and Windows code pages cannot crash prints
     env["PYTHONUNBUFFERED"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
@@ -140,6 +157,10 @@ def run_one(args, xml: Path, seed: int, alpha: float, eps: float) -> bool:
                 ]
                 if args.fast_io:
                     train_cmd += ["--tb-log-dir", str(tb_dir)]
+                if args.algo != "ppo":
+                    train_cmd += ["--algo", args.algo]
+                if args.truncation_fix:
+                    train_cmd += ["--truncation-fix"]
                 print("Launching trainer:", " ".join(train_cmd), flush=True)
                 ret = subprocess.run(
                     train_cmd,
@@ -187,6 +208,15 @@ def main():
     parser.add_argument("--fast-io", type=Path, default=None,
                         help="write run logs and TensorBoard here first, copy into the repo "
                              "after each run (use a Linux path such as ~/dcr_io under WSL)")
+    # Special-course switches, all off by default (= Sofía's baseline); see
+    # docs/special-course/CODE_ISSUES_AND_CHANGES.md. Any switch on adds a tag to the run id.
+    parser.add_argument("--algo", choices=["ppo", "maskable_ppo"], default="ppo")
+    parser.add_argument("--fix-false-accept", action="store_true",
+                        help="issue A3: adapter FIX_FALSE_ACCEPT=1")
+    parser.add_argument("--truncation-fix", action="store_true",
+                        help="issue A2: step limit reported as truncated")
+    parser.add_argument("--budget-in-mask", action="store_true",
+                        help="issue B1: adapter BUDGET_IN_MASK=1")
     args = parser.parse_args()
 
     if args.fast_io:
@@ -208,7 +238,7 @@ def main():
     for seed in seeds:
         for alpha, eps in pairs:
             ok = run_one(args, xml, seed, alpha, eps)
-            results.append((make_exp_id(args.base, seed, alpha, eps, args.k), ok))
+            results.append((make_exp_id(args.base, seed, alpha, eps, args.k, switch_tag(args)), ok))
             time.sleep(2)
 
     print(f"\n=== Summary ({datetime.now() - sweep_start} total) ===")

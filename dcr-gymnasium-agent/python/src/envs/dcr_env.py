@@ -33,8 +33,11 @@ def state_to_mask(state, event_list):
 class DCRGymEnv(gym.Env):
     metadata = {"render.modes": []}
 
-    def __init__(self, node_url="http://localhost:5001"):
+    def __init__(self, node_url="http://localhost:5001", truncation_fix=False):
         super().__init__()
+        # Special-course switch (issue A2), off by default: when on, step() returns
+        # terminated = real acceptance and truncated = step limit reached without acceptance.
+        self.truncation_fix = truncation_fix
         self.node = connect_to_dcr_environment(node_url)
         init = self.node["reset"]()
         events = init["events"]
@@ -58,6 +61,7 @@ class DCRGymEnv(gym.Env):
         self.action_space = spaces.Discrete(n_actions)
 
         self.action_mask = init.get("actionMask") if isinstance(init, dict) else None
+        self._adapter_mask = self.action_mask  # raw adapter mask for action_masks(), no fallback
         if self.action_mask is None:
             self.action_mask = state_to_mask(init.get("state", {}), self.event_list)
 
@@ -80,6 +84,7 @@ class DCRGymEnv(gym.Env):
         obs = self._state_to_obs(r["state"], self.expert_budget_remaining)
         self.label_map = r.get("labelMap", self.label_map)
         self.action_mask = r.get("actionMask", state_to_mask(r.get("state", {}), self.event_list))
+        self._adapter_mask = r.get("actionMask")
         self.episode_cost = 0.0
         self.episode_duration = 0.0
         return obs, {}
@@ -93,6 +98,7 @@ class DCRGymEnv(gym.Env):
         reward = result.get("stepReward", result.get("reward", 0))
         done = bool(result.get("done", False))
         self.action_mask = r.get("actionMask") or state_to_mask(result.get("state", {}), self.event_list)
+        self._adapter_mask = r.get("actionMask")
 
         self.episode_cost     = result.get("episodeCost", self.episode_cost)
         self.episode_duration = result.get("episodeDuration", self.episode_duration)
@@ -113,7 +119,24 @@ class DCRGymEnv(gym.Env):
             "expert_budget_initial":   result.get("expertBudgetInitial"),
             "num_budget_blocks":       result.get("numBudgetBlocks"),
         }
+        if self.truncation_fix:
+            terminated = bool(result.get("accepting", False))
+            truncated = done and not terminated  # adapter: done = accepting or maxStepReached
+            return obs, reward, terminated, truncated, info
         return obs, reward, done, False, info
+
+    def action_masks(self):
+        """Boolean mask over (event, role) actions for sb3-contrib MaskablePPO, taken from the
+        adapter's actionMask. Never falls back to state_to_mask (issue B2)."""
+        mask = getattr(self, "_adapter_mask", None)
+        if mask is None:
+            raise RuntimeError("adapter sent no actionMask; cannot mask actions")
+        if len(mask) != self.action_space.n:
+            raise RuntimeError(f"actionMask has {len(mask)} entries, action space has {self.action_space.n}")
+        mask = np.asarray(mask, dtype=bool)
+        if not mask.any():
+            raise RuntimeError("actionMask is all zero: no legal action in a non-terminal marking")
+        return mask
 
     def close(self):
         pass

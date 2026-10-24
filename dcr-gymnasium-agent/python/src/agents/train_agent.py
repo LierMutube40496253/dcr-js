@@ -217,6 +217,8 @@ def train(
     ent_coef: float,
     tb_log_dir: Path,
     seed: int,
+    algo: str = "ppo",
+    truncation_fix: bool = False,
 ):
     ts = time.strftime("%Y%m%dT%H%M%S")
     run_name = f"exp_{exp_id}_{ts}"
@@ -230,7 +232,12 @@ def train(
     print(f"Seed:           {seed}")
     print(f"Total Steps:    {total_timesteps}")
     print(f"TB Log Dir:     {tb_log_dir}")
-    print(f"Policy:         PPO (no action masking)")
+    if algo == "maskable_ppo":
+        print(f"Policy:         MaskablePPO (adapter action mask)")
+    else:
+        print(f"Policy:         PPO (no action masking)")
+    if truncation_fix:
+        print(f"Truncation fix: on (step limit -> truncated)")
     print(f"---------------------------")
 
     logs_dir = out_dir.parent / "scripts" / "logs"
@@ -242,7 +249,7 @@ def train(
     # but the agent explores all actions and learns illegal ones by negative reward.
     def make_env(seed_offset: int):
         def _init():
-            e = DCRGymEnv(node_url=node_url)
+            e = DCRGymEnv(node_url=node_url, truncation_fix=truncation_fix)
             # Ensure each env instance gets a deterministic seed.
             e.reset(seed=seed + seed_offset)
             return Monitor(e)
@@ -254,8 +261,13 @@ def train(
     # env_ref points to the inner DCRGymEnv (unwrap Monitor → DCRGymEnv)
     env_ref = vec_env.envs[0].env
 
-    # --- PPO (standard, no action masking) ---
-    model = PPO(
+    # --- PPO (standard, no action masking), or MaskablePPO with the same hyperparameters ---
+    if algo == "maskable_ppo":
+        from sb3_contrib import MaskablePPO  # masks come from DCRGymEnv.action_masks()
+        algo_cls = MaskablePPO
+    else:
+        algo_cls = PPO
+    model = algo_cls(
         "MlpPolicy",
         vec_env,
         verbose=1,
@@ -273,9 +285,10 @@ def train(
         callback=callback,
     )
 
-    model_path = out_dir / f"ppo_{run_name}.zip"
+    model_path = out_dir / f"{algo}_{run_name}.zip"
     model.save(str(model_path))
     print(f"Model saved to: {model_path}")
+    return model_path
 
 
 if __name__ == "__main__":
@@ -295,6 +308,10 @@ if __name__ == "__main__":
     )
     parser.add_argument("--ent-coef", type=float, default=0.01)
     parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--algo", choices=["ppo", "maskable_ppo"], default="ppo",
+                        help="ppo = Sofía's unmasked PPO (default); maskable_ppo = sb3-contrib MaskablePPO")
+    parser.add_argument("--truncation-fix", action="store_true",
+                        help="issue A2: report the step limit as truncated, not terminated")
 
     args = parser.parse_args()
     train(
@@ -305,4 +322,6 @@ if __name__ == "__main__":
         ent_coef=args.ent_coef,
         tb_log_dir=args.tb_log_dir,
         seed=args.seed,
+        algo=args.algo,
+        truncation_fix=args.truncation_fix,
     )
