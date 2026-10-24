@@ -34,6 +34,12 @@ Commit dbd7c49, branch feature/cost-roles. Line numbers as of 21 Oct.
 | C7 | AGENTS.md (written by Sofía, commits of 22-23 Jun) describes an older setup (Synthetic Review, 3 roles, 42 actions); the final runner uses Loan Application with 2 roles | AGENTS.md vs run_experiments.py line 75 |
 | C8 | Loan Application log is simulated (AgentSimulator), not a real company log | Thesis 5.2.2 |
 
+### Model issues and open decisions
+| # | Issue | Location | Effect / decision |
+| --- | --- | --- | --- |
+| M1 | A Loan Application case is accepted right after Assess loan risk, without a decision: the decision events (Approve, Reject, Cancel, Design offer) only have conditions from Assess loan risk, no response | app/public/examples/diagrams/LoanApp_junior_senior.xml | Learned traces stop after the risk assessment (99.9% of accepting episodes, 22 Oct runs). Question 5 for Hugo. Possible fix: response Assess loan risk -> Approve application, with Reject and Cancel excluding Approve application |
+| D1 | Dead ends in masked runs (non-accepting marking, no allowed action) currently end as truncated, so SB3 bootstraps a value for a state that has no future | dcr_env.py (dead-end handling, commit b37e17f) | OPEN, decide before the next runs. Recommendation: terminated and not accepting (value 0). No dead ends seen so far (smoke tests, E1.3 random walks) |
+
 ## Switches added (24 Oct, all off by default; tests in TESTS.md)
 
 | Switch | Fixes | Files |
