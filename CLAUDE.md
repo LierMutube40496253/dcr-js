@@ -47,6 +47,7 @@ Do not fix these silently: every fix goes behind a switch so her behaviour stays
 baseline, and is noted in docs/special-course/.
 
 ## Working rules
+- Read docs/special-course/SESSION_LOG.md at the start of every session and append to it at the end.
 - Do not change her code's behaviour without a switch that keeps her version as default.
 - Do not commit or push without asking.
 - Windows machine: Python 3.12 venv in `dcr-gymnasium-agent/python/.venv`, Node 24, Yarn 1.
