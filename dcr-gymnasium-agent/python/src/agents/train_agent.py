@@ -36,6 +36,9 @@ class StepDebugCallback(BaseCallback):
         self._ep_budget_block_count = 0
         self._csv_file = None
         self._writer = None
+        # Dead-end logging only for masked runs, so her CSV format is unchanged otherwise
+        self.log_dead_ends = getattr(env_ref, "dead_end_truncate", False)
+        self.dead_end_episodes = 0
 
     def _on_training_start(self) -> None:
         self.csv_path.parent.mkdir(parents=True, exist_ok=True)
@@ -78,7 +81,7 @@ class StepDebugCallback(BaseCallback):
                 "intercepted_reason",
                 "expert_budget_remaining",
                 "expert_budget_initial",
-            ],
+            ] + (["dead_end"] if self.log_dead_ends else []),
         )
         self._writer.writeheader()
 
@@ -162,6 +165,10 @@ class StepDebugCallback(BaseCallback):
             "expert_budget_remaining": engine_result.get("expertBudgetRemaining", ""),
             "expert_budget_initial":   engine_result.get("expertBudgetInitial", ""),
         }
+        if self.log_dead_ends:
+            row["dead_end"] = bool(info.get("dead_end", False))
+            if row["dead_end"]:
+                self.dead_end_episodes += 1
         self._writer.writerow(row)
 
         if (self.num_timesteps % self.log_every == 0) or done:
@@ -185,6 +192,8 @@ class StepDebugCallback(BaseCallback):
             self.logger.record("train/budget_block_count", self._ep_budget_block_count)
             self.logger.record("train/illegal_traces_ratio", illegal_traces_ratio)
             self.logger.record("train/episode_steps", episode_steps)
+            if self.log_dead_ends:
+                self.logger.record("train/dead_end_episodes_total", self.dead_end_episodes)
 
             # Multi-objective: log cost/duration on accepting episodes
             if info.get("accepting"):
@@ -207,6 +216,9 @@ class StepDebugCallback(BaseCallback):
     def _on_training_end(self) -> None:
         if self._csv_file is not None:
             self._csv_file.close()
+        if self.log_dead_ends:
+            print(f"Dead-end episodes (truncated, no allowed action): {self.dead_end_episodes} "
+                  f"of {self.episode_idx - 1}")
 
 
 def train(
@@ -249,7 +261,8 @@ def train(
     # but the agent explores all actions and learns illegal ones by negative reward.
     def make_env(seed_offset: int):
         def _init():
-            e = DCRGymEnv(node_url=node_url, truncation_fix=truncation_fix)
+            e = DCRGymEnv(node_url=node_url, truncation_fix=truncation_fix,
+                          dead_end_truncate=(algo == "maskable_ppo"))
             # Ensure each env instance gets a deterministic seed.
             e.reset(seed=seed + seed_offset)
             return Monitor(e)

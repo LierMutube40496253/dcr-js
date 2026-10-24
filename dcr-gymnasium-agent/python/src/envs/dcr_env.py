@@ -33,11 +33,14 @@ def state_to_mask(state, event_list):
 class DCRGymEnv(gym.Env):
     metadata = {"render.modes": []}
 
-    def __init__(self, node_url="http://localhost:5001", truncation_fix=False):
+    def __init__(self, node_url="http://localhost:5001", truncation_fix=False, dead_end_truncate=False):
         super().__init__()
         # Special-course switch (issue A2), off by default: when on, step() returns
         # terminated = real acceptance and truncated = step limit reached without acceptance.
         self.truncation_fix = truncation_fix
+        # Special-course switch for masked runs, off by default: a non-accepting marking with no
+        # allowed action (all-zero adapter mask) ends the episode as truncated, not accepting.
+        self.dead_end_truncate = dead_end_truncate
         self.node = connect_to_dcr_environment(node_url)
         init = self.node["reset"]()
         events = init["events"]
@@ -119,6 +122,12 @@ class DCRGymEnv(gym.Env):
             "expert_budget_initial":   result.get("expertBudgetInitial"),
             "num_budget_blocks":       result.get("numBudgetBlocks"),
         }
+        if self.dead_end_truncate:
+            mask = self._adapter_mask
+            info["dead_end"] = (not done and not result.get("accepting", False)
+                                and mask is not None and not any(mask))
+            if info["dead_end"]:
+                return obs, reward, False, True, info
         if self.truncation_fix:
             terminated = bool(result.get("accepting", False))
             truncated = done and not terminated  # adapter: done = accepting or maxStepReached
@@ -135,6 +144,8 @@ class DCRGymEnv(gym.Env):
             raise RuntimeError(f"actionMask has {len(mask)} entries, action space has {self.action_space.n}")
         mask = np.asarray(mask, dtype=bool)
         if not mask.any():
+            # With dead_end_truncate, step() already ended such episodes; this is only reached at
+            # reset (a graph whose initial marking is a dead end) or with the switch off.
             raise RuntimeError("actionMask is all zero: no legal action in a non-terminal marking")
         return mask
 
