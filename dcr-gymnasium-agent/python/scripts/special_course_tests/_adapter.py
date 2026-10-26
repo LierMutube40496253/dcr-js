@@ -15,7 +15,7 @@ sys.path.insert(0, str(PYTHON_PROJECT_DIR / "src"))
 from run_local import wait_for_adapter, stop_process, adapter_answers  # noqa: E402
 
 THESIS_ENV = {"MAX_EPISODE_STEPS": "300", "STEP_PENALTY": "-1.5"}
-SWITCH_VARS = ("FIX_FALSE_ACCEPT", "BUDGET_IN_MASK", "EXPERT_BUDGET_K")
+SWITCH_VARS = ("FIX_FALSE_ACCEPT", "BUDGET_IN_MASK", "FIX_FINAL_STEP", "EXPERT_BUDGET_K")
 
 
 @contextmanager

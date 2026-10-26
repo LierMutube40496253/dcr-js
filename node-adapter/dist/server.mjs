@@ -296,12 +296,12 @@ var RLDCREnvironment = class {
 };
 
 // ../dcr-engine/src/reward.ts
-var computeStepReward = (result, pendingBefore, executedInEpisode2, firstResolvedInEpisode2, eventCost, eventDuration, costWeight = 0, durationWeight = 0, maxCost = 1, maxDuration = 1) => {
+var computeStepReward = (result, pendingBefore, executedInEpisode2, firstResolvedInEpisode2, eventCost, eventDuration, costWeight = 0, durationWeight = 0, maxCost = 1, maxDuration = 1, fixFinalStep = false) => {
   if (result.reward === -10) {
     return { stepReward: -10, baseMapped: -10, noveltyDelta: 0, progressDelta: 0, costPenalty: 0, durationPenalty: 0 };
   }
   const isAccepting = Boolean(result.accepting ?? result.done);
-  if (isAccepting) {
+  if (isAccepting && !fixFinalStep) {
     return { stepReward: 100, baseMapped: 100, noveltyDelta: 0, progressDelta: 0, costPenalty: 0, durationPenalty: 0 };
   }
   const baseMapped = 1;
@@ -333,6 +333,9 @@ var computeStepReward = (result, pendingBefore, executedInEpisode2, firstResolve
   const costPenalty = costWeight > 0 && eventCost !== void 0 && maxCost > 0 ? costWeight * (eventCost / maxCost) : 0;
   const durationPenalty = durationWeight > 0 && eventDuration !== void 0 && maxDuration > 0 ? durationWeight * (eventDuration / maxDuration) : 0;
   const stepReward = baseMapped + progressDelta + noveltyDelta - costPenalty - durationPenalty;
+  if (isAccepting) {
+    return { stepReward: stepReward + 100, baseMapped: 100, noveltyDelta, progressDelta, costPenalty, durationPenalty };
+  }
   return { stepReward, baseMapped, noveltyDelta, progressDelta, costPenalty, durationPenalty };
 };
 var countPendingIncluded = (state) => {
@@ -368,6 +371,7 @@ var _kRaw = process.env.EXPERT_BUDGET_K;
 var EXPERT_BUDGET_K = !_kRaw || _kRaw === "none" ? null : Number(_kRaw);
 var FIX_FALSE_ACCEPT = process.env.FIX_FALSE_ACCEPT === "1";
 var BUDGET_IN_MASK = process.env.BUDGET_IN_MASK === "1";
+var FIX_FINAL_STEP = process.env.FIX_FINAL_STEP === "1";
 var executedInEpisode = /* @__PURE__ */ new Set();
 var firstResolvedInEpisode = /* @__PURE__ */ new Set();
 var lastResult = null;
@@ -552,14 +556,14 @@ app.post("/action", (req, res) => {
     if (actionExecuted && eventDuration !== void 0)
       episodeDuration += eventDuration;
     rewardInput.action = action;
-    const { stepReward, baseMapped, noveltyDelta, progressDelta, costPenalty, durationPenalty } = computeStepReward(rewardInput, pendingBefore, executedInEpisode, firstResolvedInEpisode, eventCost, eventDuration, COST_WEIGHT, DURATION_WEIGHT, maxGraphCost, maxGraphDuration);
+    const { stepReward, baseMapped, noveltyDelta, progressDelta, costPenalty, durationPenalty } = computeStepReward(rewardInput, pendingBefore, executedInEpisode, firstResolvedInEpisode, eventCost, eventDuration, COST_WEIGHT, DURATION_WEIGHT, maxGraphCost, maxGraphDuration, FIX_FINAL_STEP);
     const isLegalNonTerminal = baseMapped === 1;
     const isIllegal = baseMapped === -10;
     const interceptedReason = isLegal ? null : "dcr_illegal";
     if (isIllegal) {
       illegalTracesCount += 1;
     }
-    const effectiveReward = isLegalNonTerminal ? stepReward + STEP_PENALTY : stepReward;
+    const effectiveReward = isLegalNonTerminal || FIX_FINAL_STEP && baseMapped === 100 ? stepReward + STEP_PENALTY : stepReward;
     const maxStepReached = episodeSteps >= MAX_EPISODE_STEPS;
     const effectiveDone = accepting || maxStepReached;
     const augmentedResult = {
@@ -652,4 +656,5 @@ app.listen(PORT, () => {
   console.log(`Termination:               ${STRICT_GOAL_TERMINATION ? "goal + structural" : "structural (Pending \u2229 Included = \u2205)"}`);
   console.log(`FIX_FALSE_ACCEPT:          ${FIX_FALSE_ACCEPT}`);
   console.log(`BUDGET_IN_MASK:            ${BUDGET_IN_MASK}`);
+  console.log(`FIX_FINAL_STEP:            ${FIX_FINAL_STEP}`);
 });

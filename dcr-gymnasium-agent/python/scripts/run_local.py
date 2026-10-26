@@ -47,8 +47,8 @@ def switch_tag(args) -> str:
     """Short tag for the special-course switches, '' when all are off (her baseline).
     e.g. masked_fixA2A3B1 = MaskablePPO + truncation fix + false-accept fix + budget in mask."""
     parts = ["masked"] if args.algo == "maskable_ppo" else []
-    fixes = "".join(code for code, on in (("A2", args.truncation_fix), ("A3", args.fix_false_accept),
-                                          ("B1", args.budget_in_mask)) if on)
+    fixes = "".join(code for code, on in (("A1", args.fix_final_step), ("A2", args.truncation_fix),
+                                          ("A3", args.fix_false_accept), ("B1", args.budget_in_mask)) if on)
     if fixes:
         parts.append(f"fix{fixes}")
     return "_".join(parts)
@@ -121,7 +121,8 @@ def run_one(args, xml: Path, seed: int, alpha: float, eps: float) -> bool:
     if args.k is not None:
         env["EXPERT_BUDGET_K"] = str(args.k)
     # Special-course adapter switches: set only when on, so off = her environment exactly
-    for name, on in (("FIX_FALSE_ACCEPT", args.fix_false_accept), ("BUDGET_IN_MASK", args.budget_in_mask)):
+    for name, on in (("FIX_FALSE_ACCEPT", args.fix_false_accept), ("BUDGET_IN_MASK", args.budget_in_mask),
+                     ("FIX_FINAL_STEP", args.fix_final_step)):
         env.pop(name, None)
         if on:
             env[name] = "1"
@@ -211,6 +212,8 @@ def main():
     # Special-course switches, all off by default (= Sofía's baseline); see
     # docs/special-course/CODE_ISSUES_AND_CHANGES.md. Any switch on adds a tag to the run id.
     parser.add_argument("--algo", choices=["ppo", "maskable_ppo"], default="ppo")
+    parser.add_argument("--fix-final-step", action="store_true",
+                        help="issue A1: adapter FIX_FINAL_STEP=1 (accepting step priced, plus 100)")
     parser.add_argument("--fix-false-accept", action="store_true",
                         help="issue A3: adapter FIX_FALSE_ACCEPT=1")
     parser.add_argument("--truncation-fix", action="store_true",

@@ -44,6 +44,7 @@ export const computeStepReward = (
   durationWeight: number = 0,
   maxCost: number = 1,
   maxDuration: number = 1,
+  fixFinalStep: boolean = false,
 ): RewardResult => {
 
   // --- 1. Illegal action ---
@@ -52,8 +53,11 @@ export const computeStepReward = (
   }
 
   // --- 2. Acceptance (Pending ∩ Included = ∅) ---
+  // Her version (fixFinalStep false): a flat +100, so the accepting step's cost and duration are
+  // ignored (issue A1). With fixFinalStep (FIX_FINAL_STEP=1): the accepting step gets the normal
+  // step reward below plus 100; baseMapped stays 100 so accepting steps are still recognisable.
   const isAccepting = Boolean(result.accepting ?? result.done);
-  if (isAccepting) {
+  if (isAccepting && !fixFinalStep) {
     return { stepReward: 100, baseMapped: 100, noveltyDelta: 0, progressDelta: 0, costPenalty: 0, durationPenalty: 0 };
   }
 
@@ -104,6 +108,9 @@ export const computeStepReward = (
     : 0;
 
   const stepReward = baseMapped + progressDelta + noveltyDelta - costPenalty - durationPenalty;
+  if (isAccepting) {
+    return { stepReward: stepReward + 100, baseMapped: 100, noveltyDelta, progressDelta, costPenalty, durationPenalty };
+  }
   return { stepReward, baseMapped, noveltyDelta, progressDelta, costPenalty, durationPenalty };
 };
 

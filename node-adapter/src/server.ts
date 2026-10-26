@@ -46,8 +46,11 @@ const EXPERT_BUDGET_K: number | null =
 // FIX_FALSE_ACCEPT=1 (issue A3): accepting only when the executed step reaches a real DCR
 //   accepting marking (isAcceptingS); the engine's 100-legal-step limit no longer ends episodes.
 // BUDGET_IN_MASK=1 (issue B1): Expert pairs are masked out once the Expert budget is used up.
+// FIX_FINAL_STEP=1 (issue A1): the accepting step gets its normal step reward (base, step
+//   penalty, progress, repetition, cost and duration with role multipliers) plus 100.
 const FIX_FALSE_ACCEPT = process.env.FIX_FALSE_ACCEPT === "1";
 const BUDGET_IN_MASK   = process.env.BUDGET_IN_MASK === "1";
+const FIX_FINAL_STEP   = process.env.FIX_FINAL_STEP === "1";
 
 const executedInEpisode = new Set<string>();
 // Tracks which pending events have been resolved at least once this episode.
@@ -284,7 +287,7 @@ app.post("/action", (req, res) => {
 
     rewardInput.action = action;
     const { stepReward, baseMapped, noveltyDelta, progressDelta, costPenalty, durationPenalty } =
-      computeStepReward(rewardInput, pendingBefore, executedInEpisode, firstResolvedInEpisode, eventCost, eventDuration, COST_WEIGHT, DURATION_WEIGHT, maxGraphCost, maxGraphDuration);
+      computeStepReward(rewardInput, pendingBefore, executedInEpisode, firstResolvedInEpisode, eventCost, eventDuration, COST_WEIGHT, DURATION_WEIGHT, maxGraphCost, maxGraphDuration, FIX_FINAL_STEP);
 
     // Apply step penalty only for legal non-terminal actions.
     // baseMapped values from reward.ts:
@@ -299,7 +302,8 @@ app.post("/action", (req, res) => {
       illegalTracesCount += 1;
     }
     
-    const effectiveReward = isLegalNonTerminal
+    // With FIX_FINAL_STEP the accepting step pays the step penalty too (A1).
+    const effectiveReward = isLegalNonTerminal || (FIX_FINAL_STEP && baseMapped === 100)
       ? stepReward + STEP_PENALTY
       : stepReward;
 
@@ -407,4 +411,5 @@ app.listen(PORT, () => {
   console.log(`Termination:               ${STRICT_GOAL_TERMINATION ? "goal + structural" : "structural (Pending ∩ Included = ∅)"}`);
   console.log(`FIX_FALSE_ACCEPT:          ${FIX_FALSE_ACCEPT}`);
   console.log(`BUDGET_IN_MASK:            ${BUDGET_IN_MASK}`);
+  console.log(`FIX_FINAL_STEP:            ${FIX_FINAL_STEP}`);
 });
