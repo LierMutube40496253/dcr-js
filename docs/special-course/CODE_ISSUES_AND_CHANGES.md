@@ -68,10 +68,10 @@ A run with any switch on gets a tag in its id (`masked`, `fixA2A3B1`, ...).
 | SC-D2, E1.6 state abstraction | dcr_env.py | _state_to_obs | Drop bits that never change; optionally merge markings with the same enabled and pending sets |
 | SC-D2, E1.7 factored actions | server.ts getEventRolePairs; dcr_env.py action_space | | Event first, then role (MultiDiscrete) |
 | SC-D2, runs on Windows/HPC | run_experiments.py | free_adapter_port, adapter launch | Cross-platform launcher (no lsof, no bash/nvm), one adapter per run/port (B4, B5) |
-| SC-D3, start mid-case | generation.ts | RLDCREnvironment.reset | Accept a prefix of events and replay it; report the first illegal event if any (6.4% of her log) |
-| SC-D3, start mid-case | server.ts | /reset route | Read an optional prefix (and weights) from the request body and pass it on |
-| SC-D3, start mid-case | dcr_env.py | reset(options) | Pass options={"prefix": [...]} to the adapter; sample prefixes from the log during training |
-| SC-D3, choose the trade-off | server.ts | COST_WEIGHT / DURATION_WEIGHT (lines 37-38) | Today fixed at start-up, so one policy per weight pair. Either pick the matching trained policy, or send weights per reset and add them to the observation |
-| SC-D3, recommender | new file, e.g. src/recommend.py | | Given a prefix and weights: replay, list enabled next activities, rank them with the policy and rollouts, return expected remaining cost and duration |
-| SC-D3, exact check | minizinc_ground_truth/dcrjs_converter.py | | Write the marking after the prefix as the initial marking, then run the solver |
+| E1.4b partway starts (and thesis) | generation.ts | RLDCREnvironment.reset | Accept a prefix of events and replay it; report the first illegal event if any (6.4% of her log) |
+| E1.4b partway starts (and thesis) | server.ts | /reset route | Read an optional prefix (and weights) from the request body and pass it on |
+| E1.4b partway starts (and thesis) | dcr_env.py | reset(options) | Pass options={"prefix": [...]} to the adapter; sample prefixes from the log during training |
+| Thesis (was SC-D3), choose the trade-off | server.ts | COST_WEIGHT / DURATION_WEIGHT (lines 37-38) | Today fixed at start-up, so one policy per weight pair. Either pick the matching trained policy, or send weights per reset and add them to the observation |
+| Thesis (was SC-D3), recommender | new file, e.g. src/recommend.py | | Given a prefix and weights: replay, list enabled next activities, rank them with the policy and rollouts, return expected remaining cost and duration |
+| Thesis (was SC-D3), exact check | minizinc_ground_truth/dcrjs_converter.py | | Write the marking after the prefix as the initial marking, then run the solver |
 | SC-D4 figures | scripts/pareto_analysis.py, internal_validation/, external_validation/ | | Reuse her figure scripts for comparison plots |

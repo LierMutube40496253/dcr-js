@@ -7,11 +7,13 @@ commit dbd7c49. This branch, `special-course`, is where the DTU special course w
 Supervisor: Hugo A. López (DTU Compute).
 
 ## Goal of the special course
-- Study 1: measure where her PPO agent stops scaling (works at 42 actions, collapses between
-  42 and 60), add action masking, compare other algorithms (MaskablePPO, DQN, A2C, tabular
+- Study 1: measure where her PPO agent stops scaling (E1.2: real completion works at 20 events
+  and fails from 40; her successes at 40+ events were false finishes, issue A3), add action masking, compare other algorithms (MaskablePPO, DQN, A2C, tabular
   where feasible), state abstraction and factored actions, always keeping 100% valid traces.
-- Study 2: a next-activity recommender that starts from a running case (a prefix of events)
-  instead of the initial marking, under the same DCR guarantees.
+- Study 2 (SC-D3, changed after the 26 Oct meeting with Hugo; analysis only): compare existing
+  next-activity recommendation and prediction approaches by inputs, outputs, datasets and
+  evaluation, and specify the inputs and outputs of a DCR-compliant recommender. Building the
+  recommender is thesis work, not special-course work.
 - First step: reproduce her results unchanged (Expense Report, Loan Application).
 
 ## How the code is organised

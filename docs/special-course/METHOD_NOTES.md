@@ -40,7 +40,7 @@ Predictions from E1.3 to check
   turn 0% into high acceptance.
 - Synthetic chains: masked random walk finishes 8.8% (20 events), 0.17% (40), 0% (60+).
   Masking alone may not be enough from 40 events; if so, the next step is starting episodes
-  partway through (shared with Study 2, E2.3).
+  partway through (E1.4b; the same code is needed for mid-case recommendation in the thesis).
 
 ## Later sections (add when the experiment starts)
 - E1.5 other algorithms: DQN/Double DQN with masked argmax and masked targets; tabular

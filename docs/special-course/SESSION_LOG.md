@@ -80,3 +80,13 @@ Result files live in `C:\Users\lierm\Desktop\SpecialCourse\analysis\` (outside t
 - LoanApp: the graph lets a case finish without a decision event (ask Hugo whether intended).
 - Thesis claims on the scaling ceiling (about 42 pairs) need revising after E1.2 (for Hugo).
 - B2 fallback mask left in her code (unused by the new masking).
+
+## 26 Oct: meeting with Hugo
+- SC-D3 changed: no recommender prototype in the special course. New SC-D3 = comparative
+  analysis and benchmark design for next-activity recommendation (inputs, outputs, datasets,
+  evaluation of existing approaches; specification of ours). Building it is thesis work.
+- Study 1 / SC-D2 unchanged. Next: code D1 (dead end = terminated, not accepting), then E1.4b
+  (partway starts or reward shaping) for the synthetic chains.
+- Official period 1-30 Nov (2.5 ECTS). Plan: SPECIAL_COURSE_MAP.md in the course folder.
+- Updated: CLAUDE.md (Study 1 limit, Study 2 scope), CODE_ISSUES_AND_CHANGES.md (SC-D3 rows now
+  E1.4b / thesis), METHOD_NOTES.md.
