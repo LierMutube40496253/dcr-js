@@ -296,9 +296,25 @@ var RLDCREnvironment = class {
 };
 
 // ../dcr-engine/src/reward.ts
-var computeStepReward = (result, pendingBefore, executedInEpisode2, firstResolvedInEpisode2, eventCost, eventDuration, costWeight = 0, durationWeight = 0, maxCost = 1, maxDuration = 1, fixFinalStep = false) => {
+var computeStepReward = (result, pendingBefore, executedInEpisode2, firstResolvedInEpisode2, eventCost, eventDuration, costWeight = 0, durationWeight = 0, maxCost = 1, maxDuration = 1, fixFinalStep = false, shapingFix = false, shapingGamma = 0.99, shapingProgress = true) => {
   if (result.reward === -10) {
     return { stepReward: -10, baseMapped: -10, noveltyDelta: 0, progressDelta: 0, costPenalty: 0, durationPenalty: 0 };
+  }
+  if (shapingFix) {
+    const isAcc = Boolean(result.accepting ?? result.done);
+    const phi = (pending) => -2 * pending;
+    const phiAfter = isAcc || result.deadEnd ? 0 : phi(countPendingIncluded(result.state));
+    const progressDelta2 = shapingProgress ? shapingGamma * phiAfter - phi(pendingBefore) : 0;
+    const { costPenalty: costPenalty2, durationPenalty: durationPenalty2 } = objectivePenalties(
+      eventCost,
+      eventDuration,
+      costWeight,
+      durationWeight,
+      maxCost,
+      maxDuration
+    );
+    const stepReward2 = progressDelta2 - costPenalty2 - durationPenalty2 + (isAcc ? 100 : 0);
+    return { stepReward: stepReward2, baseMapped: isAcc ? 100 : 1, noveltyDelta: 0, progressDelta: progressDelta2, costPenalty: costPenalty2, durationPenalty: durationPenalty2 };
   }
   const isAccepting = Boolean(result.accepting ?? result.done);
   if (isAccepting && !fixFinalStep) {
@@ -330,14 +346,24 @@ var computeStepReward = (result, pendingBefore, executedInEpisode2, firstResolve
       noveltyDelta = -1;
     executedInEpisode2.add(action);
   }
-  const costPenalty = costWeight > 0 && eventCost !== void 0 && maxCost > 0 ? costWeight * (eventCost / maxCost) : 0;
-  const durationPenalty = durationWeight > 0 && eventDuration !== void 0 && maxDuration > 0 ? durationWeight * (eventDuration / maxDuration) : 0;
+  const { costPenalty, durationPenalty } = objectivePenalties(
+    eventCost,
+    eventDuration,
+    costWeight,
+    durationWeight,
+    maxCost,
+    maxDuration
+  );
   const stepReward = baseMapped + progressDelta + noveltyDelta - costPenalty - durationPenalty;
   if (isAccepting) {
     return { stepReward: stepReward + 100, baseMapped: 100, noveltyDelta, progressDelta, costPenalty, durationPenalty };
   }
   return { stepReward, baseMapped, noveltyDelta, progressDelta, costPenalty, durationPenalty };
 };
+var objectivePenalties = (eventCost, eventDuration, costWeight, durationWeight, maxCost, maxDuration) => ({
+  costPenalty: costWeight > 0 && eventCost !== void 0 && maxCost > 0 ? costWeight * (eventCost / maxCost) : 0,
+  durationPenalty: durationWeight > 0 && eventDuration !== void 0 && maxDuration > 0 ? durationWeight * (eventDuration / maxDuration) : 0
+});
 var countPendingIncluded = (state) => {
   if (!state)
     return 0;
@@ -372,6 +398,9 @@ var EXPERT_BUDGET_K = !_kRaw || _kRaw === "none" ? null : Number(_kRaw);
 var FIX_FALSE_ACCEPT = process.env.FIX_FALSE_ACCEPT === "1";
 var BUDGET_IN_MASK = process.env.BUDGET_IN_MASK === "1";
 var FIX_FINAL_STEP = process.env.FIX_FINAL_STEP === "1";
+var SHAPING_FIX = process.env.SHAPING_FIX === "1";
+var SHAPING_GAMMA = Number(process.env.SHAPING_GAMMA || 0.99);
+var SHAPING_PROGRESS = process.env.SHAPING_NO_PROGRESS !== "1";
 var executedInEpisode = /* @__PURE__ */ new Set();
 var firstResolvedInEpisode = /* @__PURE__ */ new Set();
 var lastResult = null;
@@ -540,6 +569,8 @@ app.post("/action", (req, res) => {
     const goalReached = GOAL_LABEL.length > 0 && label === GOAL_LABEL;
     const accepting = STRICT_GOAL_TERMINATION ? structuralAccepting && goalReached : structuralAccepting;
     const rewardInput = { ...result, accepting, done: accepting, stateBefore };
+    if (SHAPING_FIX)
+      rewardInput.deadEnd = !accepting && getValidActions().length === 0;
     const baseCost = graph.costMap?.[action] ?? 0;
     const baseDuration = graph.durationMap?.[action] ?? 0;
     const mult = chosenRole ? graph.roleMultipliers?.[chosenRole] : void 0;
@@ -556,14 +587,29 @@ app.post("/action", (req, res) => {
     if (actionExecuted && eventDuration !== void 0)
       episodeDuration += eventDuration;
     rewardInput.action = action;
-    const { stepReward, baseMapped, noveltyDelta, progressDelta, costPenalty, durationPenalty } = computeStepReward(rewardInput, pendingBefore, executedInEpisode, firstResolvedInEpisode, eventCost, eventDuration, COST_WEIGHT, DURATION_WEIGHT, maxGraphCost, maxGraphDuration, FIX_FINAL_STEP);
+    const { stepReward, baseMapped, noveltyDelta, progressDelta, costPenalty, durationPenalty } = computeStepReward(
+      rewardInput,
+      pendingBefore,
+      executedInEpisode,
+      firstResolvedInEpisode,
+      eventCost,
+      eventDuration,
+      COST_WEIGHT,
+      DURATION_WEIGHT,
+      maxGraphCost,
+      maxGraphDuration,
+      FIX_FINAL_STEP,
+      SHAPING_FIX,
+      SHAPING_GAMMA,
+      SHAPING_PROGRESS
+    );
     const isLegalNonTerminal = baseMapped === 1;
     const isIllegal = baseMapped === -10;
     const interceptedReason = isLegal ? null : "dcr_illegal";
     if (isIllegal) {
       illegalTracesCount += 1;
     }
-    const effectiveReward = isLegalNonTerminal || FIX_FINAL_STEP && baseMapped === 100 ? stepReward + STEP_PENALTY : stepReward;
+    const effectiveReward = !SHAPING_FIX && (isLegalNonTerminal || FIX_FINAL_STEP && baseMapped === 100) ? stepReward + STEP_PENALTY : stepReward;
     const maxStepReached = episodeSteps >= MAX_EPISODE_STEPS;
     const effectiveDone = accepting || maxStepReached;
     const augmentedResult = {
@@ -657,4 +703,5 @@ app.listen(PORT, () => {
   console.log(`FIX_FALSE_ACCEPT:          ${FIX_FALSE_ACCEPT}`);
   console.log(`BUDGET_IN_MASK:            ${BUDGET_IN_MASK}`);
   console.log(`FIX_FINAL_STEP:            ${FIX_FINAL_STEP}`);
+  console.log(`SHAPING_FIX:               ${SHAPING_FIX}${SHAPING_FIX ? ` (gamma ${SHAPING_GAMMA}, progress term ${SHAPING_PROGRESS ? "on" : "off"})` : ""}`);
 });

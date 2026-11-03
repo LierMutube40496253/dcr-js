@@ -6,6 +6,8 @@ the analysis scripts parse them:
 
     <base>_s<seed>_a<alpha>_b<eps>_<kunlim|k<k>>   e.g. ExpenseReport_Diaz_s1_a1p0_b0p0_kunlim
 
+Special-course switches add a tag after <base>, e.g. ExpenseReport_Diaz_fixA2_shapeFix_g1p0_s1_...
+
 Example (from anywhere):
     .venv\\Scripts\\python scripts\\run_local.py \\
         --graph ..\\..\\app\\public\\examples\\diagrams\\Expense_Report_Diaz.xml \\
@@ -43,14 +45,24 @@ def parse_seeds(raw: str) -> list[int]:
     return [int(s.strip()) for s in raw.split(",") if s.strip()]
 
 
+def weights_sweep_pairs() -> list[tuple[float, float]]:
+    """--weights-sweep: cost weight w = 0, 0.1, ..., 1 with duration weight 1 - w."""
+    return [(round(i / 10, 1), round(1 - i / 10, 1)) for i in range(11)]
+
+
 def switch_tag(args) -> str:
     """Short tag for the special-course switches, '' when all are off (her baseline).
-    e.g. masked_fixA2A3B1 = MaskablePPO + truncation fix + false-accept fix + budget in mask."""
+    e.g. masked_fixA2A3B1 = MaskablePPO + truncation fix + false-accept fix + budget in mask;
+    shapeFix (shapeFixNoProg without the progress term); g<gamma> when gamma is not 0.99."""
     parts = ["masked"] if args.algo == "maskable_ppo" else []
     fixes = "".join(code for code, on in (("A1", args.fix_final_step), ("A2", args.truncation_fix),
                                           ("A3", args.fix_false_accept), ("B1", args.budget_in_mask)) if on)
     if fixes:
         parts.append(f"fix{fixes}")
+    if args.shaping_fix:
+        parts.append("shapeFixNoProg" if args.no_progress else "shapeFix")
+    if args.gamma != 0.99:
+        parts.append(f"g{float(args.gamma)}".replace(".", "p"))
     return "_".join(parts)
 
 
@@ -122,10 +134,12 @@ def run_one(args, xml: Path, seed: int, alpha: float, eps: float) -> bool:
         env["EXPERT_BUDGET_K"] = str(args.k)
     # Special-course adapter switches: set only when on, so off = her environment exactly
     for name, on in (("FIX_FALSE_ACCEPT", args.fix_false_accept), ("BUDGET_IN_MASK", args.budget_in_mask),
-                     ("FIX_FINAL_STEP", args.fix_final_step)):
+                     ("FIX_FINAL_STEP", args.fix_final_step), ("SHAPING_FIX", args.shaping_fix),
+                     ("SHAPING_NO_PROGRESS", args.no_progress)):
         env.pop(name, None)
         if on:
             env[name] = "1"
+    env["SHAPING_GAMMA"] = str(args.gamma)  # read by the adapter only with SHAPING_FIX
     # Unbuffered UTF-8 output so the log is live and Windows code pages cannot crash prints
     env["PYTHONUNBUFFERED"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
@@ -162,6 +176,8 @@ def run_one(args, xml: Path, seed: int, alpha: float, eps: float) -> bool:
                     train_cmd += ["--algo", args.algo]
                 if args.truncation_fix:
                     train_cmd += ["--truncation-fix"]
+                if args.gamma != 0.99:
+                    train_cmd += ["--gamma", str(args.gamma)]
                 print("Launching trainer:", " ".join(train_cmd), flush=True)
                 ret = subprocess.run(
                     train_cmd,
@@ -197,8 +213,11 @@ def main():
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--graph", type=Path, required=True, help="path to the DCR XML")
     parser.add_argument("--base", required=True, help="experiment id prefix, e.g. ExpenseReport_Diaz")
-    parser.add_argument("--pairs", default="0,0;1,0;0,1;0.5,0.5;2,0.5;0.5,2",
-                        help='weight pairs "alpha,eps;alpha,eps;..."')
+    parser.add_argument("--pairs", default=None,
+                        help='weight pairs "alpha,eps;alpha,eps;..." (default: the 6 thesis pairs '
+                             '"0,0;1,0;0,1;0.5,0.5;2,0.5;0.5,2")')
+    parser.add_argument("--weights-sweep", action="store_true",
+                        help="instead of --pairs: cost weight w = 0, 0.1, ..., 1, duration weight 1 - w")
     parser.add_argument("--seeds", default="1", help='comma-separated seeds, e.g. "1,2,3"')
     parser.add_argument("--steps", type=int, default=100000)
     parser.add_argument("--ent-coef", type=float, default=0.1)
@@ -220,7 +239,18 @@ def main():
                         help="issue A2: step limit reported as truncated")
     parser.add_argument("--budget-in-mask", action="store_true",
                         help="issue B1: adapter BUDGET_IN_MASK=1")
+    parser.add_argument("--shaping-fix", action="store_true",
+                        help="adapter SHAPING_FIX=1: reward follows the objective (cost/duration "
+                             "penalties + potential-based progress, +100 on acceptance; covers A1)")
+    parser.add_argument("--no-progress", action="store_true",
+                        help="with --shaping-fix: adapter SHAPING_NO_PROGRESS=1 (no progress term)")
+    parser.add_argument("--gamma", type=float, default=0.99,
+                        help="discount factor for the agent and SHAPING_GAMMA (0.99 = her runs)")
     args = parser.parse_args()
+    if args.no_progress and not args.shaping_fix:
+        parser.error("--no-progress only applies with --shaping-fix")
+    if args.weights_sweep and args.pairs is not None:
+        parser.error("--weights-sweep replaces --pairs; give one of them")
 
     if args.fast_io:
         args.fast_io = args.fast_io.expanduser().resolve()
@@ -228,7 +258,8 @@ def main():
     xml = args.graph.expanduser().resolve()
     if not xml.exists():
         sys.exit(f"XML not found: {xml}")
-    pairs = parse_pairs(args.pairs)
+    pairs = weights_sweep_pairs() if args.weights_sweep else parse_pairs(
+        args.pairs or "0,0;1,0;0,1;0.5,0.5;2,0.5;0.5,2")
     seeds = parse_seeds(args.seeds)
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
 

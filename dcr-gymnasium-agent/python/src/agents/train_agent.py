@@ -231,6 +231,7 @@ def train(
     seed: int,
     algo: str = "ppo",
     truncation_fix: bool = False,
+    gamma: float = 0.99,
 ):
     ts = time.strftime("%Y%m%dT%H%M%S")
     run_name = f"exp_{exp_id}_{ts}"
@@ -250,6 +251,8 @@ def train(
         print(f"Policy:         PPO (no action masking)")
     if truncation_fix:
         print(f"Truncation fix: on (step limit -> truncated)")
+    if gamma != 0.99:
+        print(f"Gamma:          {gamma}")
     print(f"---------------------------")
 
     logs_dir = out_dir.parent / "scripts" / "logs"
@@ -287,6 +290,7 @@ def train(
         tensorboard_log=str(tb_log_dir) if tb_log_dir and str(tb_log_dir) else None,
         ent_coef=ent_coef,
         seed=seed,
+        gamma=gamma,  # 0.99 = SB3 default (her runs)
     )
 
     callback = StepDebugCallback(
@@ -325,6 +329,8 @@ if __name__ == "__main__":
                         help="ppo = Sofía's unmasked PPO (default); maskable_ppo = sb3-contrib MaskablePPO")
     parser.add_argument("--truncation-fix", action="store_true",
                         help="issue A2: report the step limit as truncated, not terminated")
+    parser.add_argument("--gamma", type=float, default=0.99,
+                        help="discount factor (0.99 = SB3 default, her runs)")
 
     args = parser.parse_args()
     train(
@@ -337,4 +343,5 @@ if __name__ == "__main__":
         seed=args.seed,
         algo=args.algo,
         truncation_fix=args.truncation_fix,
+        gamma=args.gamma,
     )

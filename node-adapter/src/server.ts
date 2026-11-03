@@ -51,6 +51,15 @@ const EXPERT_BUDGET_K: number | null =
 const FIX_FALSE_ACCEPT = process.env.FIX_FALSE_ACCEPT === "1";
 const BUDGET_IN_MASK   = process.env.BUDGET_IN_MASK === "1";
 const FIX_FINAL_STEP   = process.env.FIX_FINAL_STEP === "1";
+// SHAPING_FIX=1: a legal step's reward follows the objective: cost and duration penalties plus
+//   SHAPING_GAMMA * Phi(after) - Phi(before), Phi = -2 * included pending events, plus 100 on the
+//   accepting step; no +1 base, no step penalty, no repetition penalty. Blocked actions stay -10.
+//   Takes precedence over FIX_FINAL_STEP. SHAPING_GAMMA should equal the agent's gamma.
+//   Phi = 0 for the marking an episode ends in (accepting, or a dead end: no enabled event).
+//   SHAPING_NO_PROGRESS=1 (with SHAPING_FIX only): the same reward without the progress term.
+const SHAPING_FIX      = process.env.SHAPING_FIX === "1";
+const SHAPING_GAMMA    = Number(process.env.SHAPING_GAMMA || 0.99);
+const SHAPING_PROGRESS = process.env.SHAPING_NO_PROGRESS !== "1";
 
 const executedInEpisode = new Set<string>();
 // Tracks which pending events have been resolved at least once this episode.
@@ -260,6 +269,8 @@ app.post("/action", (req, res) => {
     // Ensure reward.ts uses the acceptance mode selected above.
     // Pass stateBefore so the progress signal can identify which pendings were resolved.
     const rewardInput: any = { ...result, accepting, done: accepting, stateBefore };
+    // Dead end (used by SHAPING_FIX only): not accepting and no event enabled any more.
+    if (SHAPING_FIX) rewardInput.deadEnd = !accepting && getValidActions().length === 0;
 
     // Compute effective cost/duration: base × role multiplier (falls back to flat values if no roles)
     const baseCost     = graph.costMap?.[action] ?? 0;
@@ -287,7 +298,8 @@ app.post("/action", (req, res) => {
 
     rewardInput.action = action;
     const { stepReward, baseMapped, noveltyDelta, progressDelta, costPenalty, durationPenalty } =
-      computeStepReward(rewardInput, pendingBefore, executedInEpisode, firstResolvedInEpisode, eventCost, eventDuration, COST_WEIGHT, DURATION_WEIGHT, maxGraphCost, maxGraphDuration, FIX_FINAL_STEP);
+      computeStepReward(rewardInput, pendingBefore, executedInEpisode, firstResolvedInEpisode, eventCost, eventDuration, COST_WEIGHT, DURATION_WEIGHT, maxGraphCost, maxGraphDuration, FIX_FINAL_STEP,
+                        SHAPING_FIX, SHAPING_GAMMA, SHAPING_PROGRESS);
 
     // Apply step penalty only for legal non-terminal actions.
     // baseMapped values from reward.ts:
@@ -303,7 +315,8 @@ app.post("/action", (req, res) => {
     }
     
     // With FIX_FINAL_STEP the accepting step pays the step penalty too (A1).
-    const effectiveReward = isLegalNonTerminal || (FIX_FINAL_STEP && baseMapped === 100)
+    // With SHAPING_FIX no step pays it.
+    const effectiveReward = !SHAPING_FIX && (isLegalNonTerminal || (FIX_FINAL_STEP && baseMapped === 100))
       ? stepReward + STEP_PENALTY
       : stepReward;
 
@@ -412,4 +425,5 @@ app.listen(PORT, () => {
   console.log(`FIX_FALSE_ACCEPT:          ${FIX_FALSE_ACCEPT}`);
   console.log(`BUDGET_IN_MASK:            ${BUDGET_IN_MASK}`);
   console.log(`FIX_FINAL_STEP:            ${FIX_FINAL_STEP}`);
+  console.log(`SHAPING_FIX:               ${SHAPING_FIX}${SHAPING_FIX ? ` (gamma ${SHAPING_GAMMA}, progress term ${SHAPING_PROGRESS ? "on" : "off"})` : ""}`);
 });

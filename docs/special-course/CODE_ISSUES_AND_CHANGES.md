@@ -7,7 +7,7 @@ Commit dbd7c49, branch feature/cost-roles. Line numbers as of 21 Oct.
 ### Major: change results
 | # | Issue | Location | Effect | Status |
 | --- | --- | --- | --- | --- |
-| A1 | Final step's cost and duration never enter the reward (flat +100) | dcr-engine/src/reward.ts, computeStepReward, lines 54-58 | Expense Report: ...Approve>PayOut (cost 50) and ...Approve>Withdraw (cost 735) get identical reward under every weight pair. Explains Table 6.3 (median cost 735 for the cost-focused agent) | Confirmed by replay, 21 Oct. **Fixed behind a switch** (`FIX_FINAL_STEP=1`, `run_local.py --fix-final-step`, run-id tag `fixA1`), 26 Oct; test f. With the switch the accepting step gets its normal step reward (base +1, step penalty, progress, repetition, cost and duration with role multipliers) plus 100; `baseMapped` stays 100 |
+| A1 | Final step's cost and duration never enter the reward (flat +100) | dcr-engine/src/reward.ts, computeStepReward, lines 54-58 | Expense Report: ...Approve>PayOut (cost 50) and ...Approve>Withdraw (cost 735) get identical reward under every weight pair. Explains Table 6.3 (median cost 735 for the cost-focused agent) | Confirmed by replay, 21 Oct. **Fixed behind a switch** (`FIX_FINAL_STEP=1`, `run_local.py --fix-final-step`, run-id tag `fixA1`), 26 Oct; test f. With the switch the accepting step gets its normal step reward (base +1, step penalty, progress, repetition, cost and duration with role multipliers) plus 100; `baseMapped` stays 100. Also covered by `SHAPING_FIX=1` (3 Nov, test g/h), which prices every step by the objective only |
 | A2 | Hitting the step limit is reported as a normal end (terminated), never as truncated | dcr-gymnasium-agent/python/src/envs/dcr_env.py, step(), line 116 | Value estimates learn "nothing more to earn" at the cut-off. Small for her (about 100% acceptance); large on big graphs where most episodes hit the limit (graph 09: all of them) | Read in code; thesis 9.5 admits it. **Fixed behind a switch** (`--truncation-fix`), 24 Oct; test d |
 | A3 | After 100 legal steps the episode is marked accepting and gets +100, even though the process is not finished | dcr-engine/src/generation.ts, RLDCREnvironment.step (done = accepting OR currentStep >= maxSteps, maxSteps defaults to 100); node-adapter/src/server.ts line 30 (created without maxSteps) and the /action route (structuralAccepting = result.done) | Replay 21 Oct: Expense Report, FillOut 100 times: step 100 gives +100, accepting=True, with 2 events still pending. Inflates acceptance rates and rewards looping early in training. How often it happened in her runs is unknown: check logs for accepting episodes with pendingAfter > 0 | Confirmed by replay, 21 Oct. **Fixed behind a switch** (`FIX_FALSE_ACCEPT=1`), 24 Oct; test b. Note: the fix also requires that the action executed, since a blocked action leaves an initially accepting marking (e.g. LoanApp_junior_senior) unchanged |
 
@@ -48,9 +48,22 @@ Commit dbd7c49, branch feature/cost-roles. Line numbers as of 21 Oct.
 | `--truncation-fix` (`train_agent.py`, `run_local.py`) | A2 | dcr_env.py step(), train_agent.py |
 | `BUDGET_IN_MASK=1` (adapter env; `run_local.py --budget-in-mask`) | B1 | node-adapter/src/server.ts buildActionMask |
 | `--algo maskable_ppo` (`train_agent.py`, `run_local.py`) | masking (replaces B2 for masked runs) | dcr_env.py action_masks(), train_agent.py; sb3-contrib 2.7.1 in requirements.txt |
+| `FIX_FINAL_STEP=1` (adapter env; `run_local.py --fix-final-step`), 26 Oct | A1 | dcr-engine/src/reward.ts, node-adapter/src/server.ts |
+| `SHAPING_FIX=1` (adapter env; `run_local.py --shaping-fix`), 3 Nov; with `SHAPING_GAMMA` (`--gamma`) and `SHAPING_NO_PROGRESS=1` (`--no-progress`) | A1 and the Expense Report reward-scale problem (cheap path loses to the short one, `analysis/A1_A3_switch_results.md`) | reward.ts computeStepReward (shaping branch, shared objectivePenalties), server.ts /action (dead-end flag, no step penalty) |
+| `--gamma` (`train_agent.py`, `run_local.py`), 3 Nov | (discount factor, default 0.99 = hers) | train_agent.py train(); run_local.py tag `g<gamma>` |
 
 With all switches off, a 2,048-step run is identical row for row to commit fe01d1c (test a).
-A run with any switch on gets a tag in its id (`masked`, `fixA2A3B1`, ...).
+A run with any switch on gets a tag in its id (`masked`, `fixA2A3B1`, `shapeFix`, `g1p0`, ...).
+
+`SHAPING_FIX` reward of a legal step: -alpha x cost/maxCost - eps x duration/maxDuration (role
+multipliers as before) + gamma x Phi(after) - Phi(before), Phi = -2 x included pending events, +100
+on the accepting step; no +1 base, step penalty or repetition penalty; blocked actions -10. Phi is 0
+for the marking an episode ends in (accepting or dead end), so the progress terms are potential-based
+and, with gamma = 1, a finished case's total is 100 - its weighted normalised cost and duration
+(Expense Report: P1 100 - 50/700, P2 100 - 710/700, D 100 - 735/700; test g). The cheap path then
+wins at any alpha > 0 with gamma = 1. Remaining gamma < 1 effect: the +100 is still discounted by
+path length (about 1 unit per extra step at 0.99), which is why `--gamma` exists. Without A3 (her
+engine's 100-legal-step accept) a fake accept still gets +100 here; combine with `--fix-false-accept`.
 
 ## B. Functions to change during the special course
 
@@ -63,6 +76,7 @@ A run with any switch on gets a tag in its id (`masked`, `fixA2A3B1`, ...).
 | SC-D2, E1.4 masking with k | server.ts | buildActionMask / BUDGET GATE | Set Expert pairs to 0 when the budget is used up (fixes B1) |
 | SC-D2, E1.4-E1.5 algorithms | train_agent.py | train(), argument parser | Add --algo (PPO, MaskablePPO, DQN, A2C), thesis defaults (100,000 steps, entropy 0.1); add sb3-contrib to requirements.txt |
 | SC-D2, reward fix (A1, done 26 Oct) | reward.ts; server.ts | computeStepReward (fixFinalStep); /action step penalty | `FIX_FINAL_STEP=1`: the accepting step is priced like any other step, plus 100; her flat +100 stays the default |
+| SC-D2, reward that follows the objective (done 3 Nov, no runs yet) | reward.ts; server.ts; train_agent.py; run_local.py | computeStepReward (shapingFix); /action; --gamma; --weights-sweep | `SHAPING_FIX=1`: objective penalties + potential-based progress, +100 on acceptance; `--no-progress` baseline; `--weights-sweep` w = 0..1 by 0.1 |
 | SC-D2, E1.2 scaling | minizinc_ground_truth/random_dcr_generator.py; external_validation/run_scaling_rl_local.py | generate_graph | Reuse to make the 20-100 event graphs |
 | SC-D2, E1.3 state counts | minizinc_ground_truth/compute_lmin.py (BFS) | | Extend the BFS to count reachable markings and average enabled events per step |
 | SC-D2, E1.6 state abstraction | dcr_env.py | _state_to_obs | Drop bits that never change; optionally merge markings with the same enabled and pending sets |

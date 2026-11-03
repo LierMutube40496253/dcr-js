@@ -7,12 +7,21 @@ The switches (all OFF by default, so off = Sofía's behaviour):
 | `FIX_FALSE_ACCEPT=1` | adapter env var; `run_local.py --fix-false-accept` | A3 | Accepting only if the executed step reaches a real DCR accepting marking (`isAcceptingS`); the engine's 100-legal-step limit never gives accepting or +100. Episodes end on real acceptance or `MAX_EPISODE_STEPS`. |
 | `--truncation-fix` | `train_agent.py`, `run_local.py` | A2 | `dcr_env.step` returns terminated = acceptance, truncated = step limit without acceptance, so SB3 bootstraps the cut-off state (`TimeLimit.truncated`). |
 | `FIX_FINAL_STEP=1` | adapter env var; `run_local.py --fix-final-step` | A1 | The accepting step gets its normal step reward (+1, step penalty, progress, repetition, cost and duration with role multipliers) plus 100, instead of a flat +100. `baseMapped` stays 100. |
+| `SHAPING_FIX=1` | adapter env var; `run_local.py --shaping-fix` | A1 + reward scale | A legal step's reward follows the objective: minus cost and duration penalties (role multipliers as before) plus a progress term gamma * Phi(after) - Phi(before), Phi(marking) = -2 x included pending events; no +1 base, no step penalty, no repetition penalty. The accepting step gets the same plus 100 (covers A1; takes precedence over `FIX_FINAL_STEP`). Phi = 0 for the marking an episode ends in (accepting, or a dead end: no enabled event), so with gamma = 1 the progress terms of a finished case add up to -Phi(initial), 0 when no event starts pending. Blocked actions (DCR-illegal, budget-blocked) stay a flat -10. Episodes cut by the step limit keep Phi of their last marking (a truncation). |
+| `SHAPING_GAMMA=g` | adapter env var; set by `run_local.py --gamma` (always, default 0.99) | (with `SHAPING_FIX`) | gamma of the progress term; should equal the agent's gamma. Read only with `SHAPING_FIX=1`. |
+| `SHAPING_NO_PROGRESS=1` | adapter env var; `run_local.py --no-progress` (needs `--shaping-fix`) | baseline | `SHAPING_FIX` reward without the progress term. |
+| `--gamma g` | `train_agent.py`, `run_local.py` | | PPO discount factor; default 0.99 = SB3 default = her runs. `run_local.py` passes it to the trainer only when not 0.99. |
 | `BUDGET_IN_MASK=1` | adapter env var; `run_local.py --budget-in-mask` | B1 | Expert pairs are 0 in the action mask once the Expert budget is used up. The budget gate itself is unchanged. |
 | `--algo maskable_ppo` | `train_agent.py`, `run_local.py` | (masking) | sb3-contrib MaskablePPO with the same hyperparameters as PPO; masks from `DCRGymEnv.action_masks()` (the adapter's `actionMask`, never the `state_to_mask` fallback, issue B2). Also turns on dead-end handling (below). |
 | dead-end handling (`DCRGymEnv(dead_end_truncate=True)`, on with `--algo maskable_ppo` only) | `dcr_env.py`, `train_agent.py` | (masking) | A non-accepting marking with no allowed action (all-zero mask) ends the episode as truncated, not accepting, no +100. Logged in a `dead_end` trace column (masked runs only) and counted per run ("Dead-end episodes: N of M" at the end of the run log). |
 
 Any switch on adds a tag to the run id: `masked` for MaskablePPO, `fix` + the issue codes for the
 fixes, e.g. `E1_4_Synth60_masked_fixA2A3B1_s1_a0p0_b0p0_kunlim` (A1 comes first: `fixA1A3`). No tag = her baseline.
+Then `shapeFix` (or `shapeFixNoProg` with `--no-progress`) and `g<gamma>` when gamma is not 0.99,
+e.g. `ExpenseReport_Diaz_fixA2_shapeFix_g1p0_s1_a1p0_b0p0_kunlim`.
+
+`run_local.py --weights-sweep` replaces `--pairs` with cost weight w = 0, 0.1, ..., 1 and duration
+weight 1 - w (11 pairs, run ids `a0p0_b1p0` ... `a0p3_b0p7` ... `a1p0_b0p0`). Not a switch: no tag.
 
 ## Running the tests
 
@@ -54,6 +63,19 @@ python scripts/special_course_tests/test_e_dead_end.py
 #    role. FIX_FINAL_STEP=1: 1 + progress + repetition - cost - duration + STEP_PENALTY + 100, cost
 #    and duration with the role multipliers; earlier steps unchanged. Port 5016, a few seconds.
 python scripts/special_course_tests/test_f_final_step.py
+
+# g. SHAPING_FIX: Expense Report, COST_WEIGHT=1, DURATION_WEIGHT=0, SHAPING_GAMMA=1. Replays the
+#    three paths; totals must be 100 - 50/700 (Approve > PayOut), 100 - 710/700 (Withdraw) and
+#    100 - 735/700 (Approve > Withdraw), progress terms adding up to 0; with SHAPING_NO_PROGRESS=1
+#    the same totals and every progress term 0. Dead end (test e graph, gamma 1 and 0.99): the step
+#    into it has progress 0 (Phi = 0) and reward -1. Ports 5017-5018, a few seconds.
+python scripts/special_course_tests/test_g_shaping_paths.py
+
+# h. SHAPING_FIX: LoanApp_junior_senior, COST_WEIGHT=1, DURATION_WEIGHT=0, gamma 0.99. A seeded
+#    masked random walk to real acceptance ending in Assess loan risk, replayed with each role:
+#    the Junior final step must earn more than the Expert one, each equal to
+#    -Phi(before) - cost x multiplier / maxCost + 100. Port 5019, a few seconds.
+python scripts/special_course_tests/test_h_shaping_roles.py
 ```
 
 ## Results, 24 Oct 2026 (Windows .venv; c also run in WSL .venv-linux with identical numbers)
@@ -82,3 +104,13 @@ byte-identical bundle, so the committed bundle differs from hers only by the swi
 | a | PASS: 2,048 rows each, identical row for row to fe01d1c (switch off = her code) |
 | b | PASS: same numbers as 24 Oct |
 | f | PASS: walk of 21 steps ending in Assess loan risk (base cost 318, duration 175). Off: +100 for both roles. On: Expert 97.5793, Junior 97.8437 (= 1 - 1 repetition - cost - duration - 1.5 + 100; Expert cost -0.8292, duration -0.0915; Junior cost -0.2902, duration -0.3661) |
+
+## Results, 3 Nov 2026 (SHAPING_FIX, --gamma, --no-progress added; Windows .venv)
+
+| Test | Result |
+| --- | --- |
+| a | PASS: 2,048 rows each, identical row for row to fe01d1c (all switches off) |
+| b, c (3 variants), d, e, f | PASS, same numbers as 24 and 26 Oct (c and e need `PYTHONIOENCODING=utf-8` when output is redirected to a file on Windows: the trainer prints a "->" arrow character) |
+| g | PASS: with progress: P1 99.928571, P2 98.985714, D 98.950000 (= 100 - 50/700, 100 - 710/700, 100 - 735/700); progress terms [-4, 2, 2], [-4, 4], [-4, 2, 2]. Without progress: same totals, all progress terms 0. Dead end, gamma 1 and 0.99: progress 0, reward -1 |
+| h | PASS: walk seed 1, 21 steps, final Assess loan risk (base cost 318, maxCost 767), 1 pending before: Junior 101.709778 (cost -0.290222) > Expert 101.170795 (cost -0.829205), each = 0.99 x 0 + 2 - cost + 100 |
+

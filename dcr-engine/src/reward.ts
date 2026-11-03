@@ -45,11 +45,33 @@ export const computeStepReward = (
   maxCost: number = 1,
   maxDuration: number = 1,
   fixFinalStep: boolean = false,
+  shapingFix: boolean = false,
+  shapingGamma: number = 0.99,
+  shapingProgress: boolean = true,
 ): RewardResult => {
 
   // --- 1. Illegal action ---
   if (result.reward === -10) {
     return { stepReward: -10, baseMapped: -10, noveltyDelta: 0, progressDelta: 0, costPenalty: 0, durationPenalty: 0 };
+  }
+
+  // Special course, SHAPING_FIX=1: the reward follows the objective. A legal step gets
+  //   - cost and duration penalties + gamma * Phi(after) - Phi(before) (+100 when accepting),
+  // with Phi(marking) = -2 * (included pending events). No +1 base, no repetition penalty and
+  // (in server.ts) no step penalty. Covers A1, since the accepting step is priced too.
+  // Phi is taken as 0 for the marking an episode ends in (accepting, or a dead end with no
+  // enabled event: result.deadEnd), so the progress terms of a finished case add up to
+  // -Phi(initial marking), 0 when no event starts pending (exactly so with gamma = 1).
+  // shapingProgress false (SHAPING_NO_PROGRESS=1): the same reward without the progress term.
+  if (shapingFix) {
+    const isAcc = Boolean(result.accepting ?? result.done);
+    const phi = (pending: number) => -2 * pending;
+    const phiAfter = isAcc || result.deadEnd ? 0 : phi(countPendingIncluded(result.state));
+    const progressDelta = shapingProgress ? shapingGamma * phiAfter - phi(pendingBefore) : 0;
+    const { costPenalty, durationPenalty } = objectivePenalties(
+      eventCost, eventDuration, costWeight, durationWeight, maxCost, maxDuration);
+    const stepReward = progressDelta - costPenalty - durationPenalty + (isAcc ? 100 : 0);
+    return { stepReward, baseMapped: isAcc ? 100 : 1, noveltyDelta: 0, progressDelta, costPenalty, durationPenalty };
   }
 
   // --- 2. Acceptance (Pending ∩ Included = ∅) ---
@@ -100,12 +122,8 @@ export const computeStepReward = (
   // --- 6. Multi-objective cost/duration penalties — normalised by graph maximum ---
   // Normalisation ensures penalties are bounded to [0, weight], preventing them from
   // overwhelming the illegal action penalty (-10) on graphs with large absolute values.
-  const costPenalty     = (costWeight > 0     && eventCost     !== undefined && maxCost     > 0)
-    ? costWeight     * (eventCost     / maxCost)
-    : 0;
-  const durationPenalty = (durationWeight > 0 && eventDuration !== undefined && maxDuration > 0)
-    ? durationWeight * (eventDuration / maxDuration)
-    : 0;
+  const { costPenalty, durationPenalty } = objectivePenalties(
+    eventCost, eventDuration, costWeight, durationWeight, maxCost, maxDuration);
 
   const stepReward = baseMapped + progressDelta + noveltyDelta - costPenalty - durationPenalty;
   if (isAccepting) {
@@ -113,6 +131,22 @@ export const computeStepReward = (
   }
   return { stepReward, baseMapped, noveltyDelta, progressDelta, costPenalty, durationPenalty };
 };
+
+const objectivePenalties = (
+  eventCost: number | undefined,
+  eventDuration: number | undefined,
+  costWeight: number,
+  durationWeight: number,
+  maxCost: number,
+  maxDuration: number,
+) => ({
+  costPenalty: (costWeight > 0 && eventCost !== undefined && maxCost > 0)
+    ? costWeight * (eventCost / maxCost)
+    : 0,
+  durationPenalty: (durationWeight > 0 && eventDuration !== undefined && maxDuration > 0)
+    ? durationWeight * (eventDuration / maxDuration)
+    : 0,
+});
 
 /**
  * Count events that are both pending AND included.

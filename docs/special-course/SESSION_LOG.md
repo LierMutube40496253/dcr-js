@@ -72,7 +72,8 @@ Result files live in `C:\Users\lierm\Desktop\SpecialCourse\analysis\` (outside t
 | 1e4631e | 24 Oct | Issues doc: M1 (LoanApp accepts without a decision), D1 (dead-end handling, open) |
 | e4d09ef | 26 Oct | Docs: 26 Oct meeting outcome (SC-D3 analysis only, E1.2 scaling limit) |
 | 22dbcaf | 26 Oct | A1 fix behind a switch (`FIX_FINAL_STEP`, `--fix-final-step`); test f |
-| (next)  | 3 Nov  | This log entry (A1/A3 sweeps of 26 Oct-3 Nov) |
+| 749b64d | 3 Nov  | Session log: A1/A3 sweeps of 26 Oct-3 Nov |
+| (next)  | 3 Nov  | Analysis entry; `SHAPING_FIX`, `--gamma`, `--no-progress`, `--weights-sweep`; tests g, h |
 
 ## Open issues
 - A1 (flat +100 on the accepting step, so the final event's cost and role are never priced):
@@ -116,3 +117,42 @@ Result files live in `C:\Users\lierm\Desktop\SpecialCourse\analysis\` (outside t
 - Next: analyse (b)/(c) against (a)/her LoanApp runs (does the cost-focused agent still prefer the
   Withdraw ending? are final-event roles now priced?) and (d) against E1.2 (real acceptance at 20
   and 40 events without false finishes).
+
+## 3 Nov 2026: analysis of the A1 and A3 runs
+Result: `analysis/A1_A3_switch_results.md` (scripts `a1_a3_analysis.py`, `expense_path_returns.py`).
+- LoanApp, fixA1: works as intended. Assess loan risk (ends 99.9% of cases) now follows the
+  objective: Expert 2-8% at (1,0), 91-99% at (0,1) (her version about 50% everywhere). Mean cost
+  at (1,0) 1437 -> 1273, mean duration at (0,1) 645 -> 503; front 26.75 vs 25.75 points; same
+  min-cost and min-duration points.
+- Expense Report, fixA1: the dominated D path disappears, but every weight pair converges to P2
+  (710, 2,700), including cost-focused ones (her version: P1 and D tied at about 45% each).
+  Cause: with +100 for completion and gamma 0.99, the shorter path's earlier bonus is worth about
+  1 unit, more than the normalised cost saving of P1 (0.94 at alpha 1). Reward scale needs a decision.
+- Synth20/40, A3 only: no fake accepts; Synth40 0 real (1 completion in 4 runs). Synth20 fails in
+  3 of 4 seeds (1.5-10% real) while A3 + A2 (E1.4) succeeds in 4 of 4; first real completion
+  identical per seed, so the A2 fix decides it. Use A3 only together with A2.
+- For Hugo: A1 result, the reward-scale issue on the Expense Report, A3 needs A2.
+
+## 3 Nov 2026: SHAPING_FIX, --gamma, --no-progress, --weights-sweep (no runs)
+Follows from the Expense Report result above (cheap path loses to the short one).
+- `SHAPING_FIX=1` / `run_local.py --shaping-fix` (tag `shapeFix`): a legal step's reward is
+  -alpha x cost/maxCost - eps x duration/maxDuration (role multipliers) + gamma x Phi(after) -
+  Phi(before), Phi = -2 x included pending events, +100 on the accepting step (covers A1); no +1
+  base, no step penalty, no repetition penalty; blocked actions stay -10. Phi = 0 for the marking
+  an episode ends in (accepting, or a dead end with no enabled event; user's addition), so the
+  progress terms add up to 0 over a finished case when gamma = 1 and no event starts pending.
+  Step-limit ends keep Phi (truncation; the last step there may be a blocked one).
+- `--no-progress` (needs `--shaping-fix`, tag `shapeFixNoProg`): adapter `SHAPING_NO_PROGRESS=1`,
+  the same reward without the progress term, as a baseline.
+- `--gamma` in train_agent.py and run_local.py (default 0.99 = SB3 default = her runs; tag
+  `g<gamma>` otherwise); run_local.py always passes it to the adapter as `SHAPING_GAMMA`.
+- `run_local.py --weights-sweep`: w = 0, 0.1, ..., 1 for cost, 1 - w for duration (11 pairs).
+- Tests: g (Expense Report, alpha 1, gamma 1: P1 99.928571 = 100 - 50/700, P2 98.985714, D 98.95,
+  progress terms [-4, 2, 2] / [-4, 4] summing to 0; same totals with --no-progress; dead-end step
+  progress 0, reward -1) PASS; h (LoanApp, alpha 1: final Assess loan risk Junior 101.7098 >
+  Expert 101.1708) PASS; a (switches off, identical to fe01d1c) PASS; b, c (3 variants), d, e, f PASS
+  with the same numbers as before (c, e need PYTHONIOENCODING=utf-8 when redirected on Windows).
+- dist/server.mjs rebuilt. No training runs started.
+- Open: which runs to do with it (Expense Report and LoanApp, gamma 0.99 vs 1, with and without
+  progress, the 11-pair weights sweep); with gamma 0.99 the +100 is still discounted by path
+  length (about 1 unit per extra step), so the cheap Expense path needs alpha above about 1.06.
