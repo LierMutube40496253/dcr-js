@@ -68,11 +68,15 @@ Result files live in `C:\Users\lierm\Desktop\SpecialCourse\analysis\` (outside t
 | 83bf48f | 24 Oct | A2, A3, B1 fixes and MaskablePPO behind off-by-default switches |
 | e1d79b7 | 24 Oct | Switch tests a-d, TESTS.md; A2, A3, B1 marked fixed behind a switch |
 | b37e17f | 24 Oct | Dead ends in masked runs end as truncated; test e |
-| (next)  | 24 Oct | This log, METHOD_NOTES.md copy, CLAUDE.md session-log rule |
+| 8b45edf | 24 Oct | This log, METHOD_NOTES.md copy, CLAUDE.md session-log rule |
+| 1e4631e | 24 Oct | Issues doc: M1 (LoanApp accepts without a decision), D1 (dead-end handling, open) |
+| e4d09ef | 26 Oct | Docs: 26 Oct meeting outcome (SC-D3 analysis only, E1.2 scaling limit) |
+| 22dbcaf | 26 Oct | A1 fix behind a switch (`FIX_FINAL_STEP`, `--fix-final-step`); test f |
+| (next)  | 3 Nov  | This log entry (A1/A3 sweeps of 26 Oct-3 Nov) |
 
 ## Open issues
 - A1 (flat +100 on the accepting step, so the final event's cost and role are never priced):
-  not fixed; optional switch only if Hugo agrees.
+  fixed behind `FIX_FINAL_STEP=1` (26 Oct); runs done, analysis still to do.
 - Dead ends are ended as truncated (as specified in METHOD_NOTES). A dead end has no future, so
   terminated would be the more standard choice for value learning; worth deciding before final runs.
 - Masked and unmasked runs use the same 300-step limit, but blocked attempts count toward it
@@ -90,3 +94,25 @@ Result files live in `C:\Users\lierm\Desktop\SpecialCourse\analysis\` (outside t
 - Official period 1-30 Nov (2.5 ECTS). Plan: SPECIAL_COURSE_MAP.md in the course folder.
 - Updated: CLAUDE.md (Study 1 limit, Study 2 scope), CODE_ISSUES_AND_CHANGES.md (SC-D3 rows now
   E1.4b / thesis), METHOD_NOTES.md.
+
+## 26 Oct - 3 Nov 2026: A1 switch, A1 and A3 sweeps (WSL, --fast-io, 100,000 steps)
+- A1 switch: `FIX_FINAL_STEP=1` / `run_local.py --fix-final-step`, run-id tag `fixA1`. The accepting
+  step gets its normal step reward (+1, step penalty, progress, repetition, cost and duration with
+  role multipliers) plus 100; `baseMapped` stays 100. Test f PASS (LoanApp, final Assess loan risk:
+  off +100 for both roles; on Expert 97.58, Junior 97.84); tests a and b still PASS.
+- Sweeps (her settings otherwise; 74 runs, all OK, each with one complete trace of 100,352 steps):
+  (a) `ExpenseReport_Diaz_s{2,3,4}_<pair>_kunlim`, no switches, 18 runs (seed 1 from 21 Oct);
+  (b) `ExpenseReport_Diaz_fixA1_s{1-4}_<pair>_kunlim`, 24 runs;
+  (c) `LoanApp_roles_fixA1_s{1-4}_<pair>_kunlim`, 24 runs;
+  (d) `E1_2_Synth{20,40}_fixA3_s{1-4}_a0p0_b0p0_kunlim`, `--fix-false-accept` only, 8 runs.
+- Wall time: first attempt 26 Oct 16:46-18:56, four sweeps in parallel, 11-23 min per run; (d)
+  finished (Synth20 57 min, Synth40 1 h 11 min). At 18:56 C: was full (30 MB free; not our
+  files: logs 3.4 GB, WSL disk 5.3 GB) and writes to /mnt/c failed with EIO: 29 runs had finished,
+  3 broke (partial files kept in `scripts/logs/failed_26oct_diskfull/`, not used), 42 not started.
+  Rerun of the 45 (`~/sweeps_26oct_rerun.sh`, three sweeps in parallel) 3 Nov 02:02-04:22,
+  2 h 20 min, 5.5-9.8 min per run, all OK.
+- WSL failed to start a few times on 26 Oct (Wsl/Service/CreateInstance E_UNEXPECTED / E_FAIL);
+  it worked again without a reset. Long sweeps are run by hand in the Ubuntu app, not from Claude.
+- Next: analyse (b)/(c) against (a)/her LoanApp runs (does the cost-focused agent still prefer the
+  Withdraw ending? are final-event roles now priced?) and (d) against E1.2 (real acceptance at 20
+  and 40 events without false finishes).
