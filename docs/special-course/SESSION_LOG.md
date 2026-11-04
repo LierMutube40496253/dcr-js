@@ -73,7 +73,7 @@ Result files live in `C:\Users\lierm\Desktop\SpecialCourse\analysis\` (outside t
 | e4d09ef | 26 Oct | Docs: 26 Oct meeting outcome (SC-D3 analysis only, E1.2 scaling limit) |
 | 22dbcaf | 26 Oct | A1 fix behind a switch (`FIX_FINAL_STEP`, `--fix-final-step`); test f |
 | 749b64d | 3 Nov  | Session log: A1/A3 sweeps of 26 Oct-3 Nov |
-| (next)  | 3 Nov  | Analysis entry; `SHAPING_FIX`, `--gamma`, `--no-progress`, `--weights-sweep`; tests g, h |
+| 1e61d86 | 3 Nov  | Analysis entry; `SHAPING_FIX`, `--gamma`, `--no-progress`, `--weights-sweep`; tests g, h |
 
 ## Open issues
 - A1 (flat +100 on the accepting step, so the final event's cost and role are never priced):
@@ -156,3 +156,16 @@ Follows from the Expense Report result above (cheap path loses to the short one)
 - Open: which runs to do with it (Expense Report and LoanApp, gamma 0.99 vs 1, with and without
   progress, the 11-pair weights sweep); with gamma 0.99 the +100 is still discounted by path
   length (about 1 unit per extra step), so the cheap Expense path needs alpha above about 1.06.
+
+## 3 Nov 2026: Expense Report weights sweeps with A2 + A3 (132 runs, not analysed yet)
+Commit 1e61d86, WSL, `~/sweeps_3nov.sh`, `--weights-sweep` (11 pairs, w = 0, 0.1, ..., 1 for cost,
+1 - w for duration), seeds 1-4, 100,000 steps, `--fix-false-accept --truncation-fix --fast-io`:
+  (a) `ExpenseReport_Diaz_fixA2A3_shapeFix_g1p0_s{1-4}_<pair>_kunlim`, `--shaping-fix --gamma 1.0`, 44 runs;
+  (b) `ExpenseReport_Diaz_fixA2A3_shapeFixNoProg_g1p0_s{1-4}_<pair>_kunlim`, also `--no-progress`, 44 runs;
+  (c) `ExpenseReport_Diaz_fixA1A2A3_s{1-4}_<pair>_kunlim`, `--fix-final-step`, gamma 0.99, 44 runs.
+- Wall time: three sweeps in parallel, 15:58-22:27, (a) 6 h 24 min, (b) 6 h 28 min, (c) 6 h 28 min;
+  7.6-10.7 min per run. No failures: 132 runs OK, each with a 100,353-line trace, "Model saved" in
+  the run log, one TensorBoard dir and one model.
+- Disk: free space on C: went from 82 to 69 GB (about 90 MB per run counting the `--fast-io` copies
+  in `~/dcr_io/sh_{a,b,c}`, 5 GB, still there), more than the 3-4 GB estimated beforehand.
+- Next: analysis; LoanApp sweeps (`~/sweeps_4nov_loanapp.sh`) to be run next.
