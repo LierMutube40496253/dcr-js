@@ -169,3 +169,18 @@ Commit 1e61d86, WSL, `~/sweeps_3nov.sh`, `--weights-sweep` (11 pairs, w = 0, 0.1
 - Disk: free space on C: went from 82 to 69 GB (about 90 MB per run counting the `--fast-io` copies
   in `~/dcr_io/sh_{a,b,c}`, 5 GB, still there), more than the 3-4 GB estimated beforehand.
 - Next: analysis; LoanApp sweeps (`~/sweeps_4nov_loanapp.sh`) to be run next.
+
+## 4 Nov 2026: LoanApp weights sweeps with A2 + A3 (88 runs)
+Commit 17f6f6c (code as in 1e61d86), WSL, `~/sweeps_4nov_loanapp.sh`, graph LoanApp_junior_senior,
+run-id base `LoanApp_roles`, `--weights-sweep` (11 pairs), seeds 1-4, 100,000 steps,
+`--fix-false-accept --truncation-fix --fast-io`:
+  (a) `LoanApp_roles_fixA2A3_shapeFix_g1p0_s{1-4}_<pair>_kunlim`, `--shaping-fix --gamma 1.0`, 44 runs;
+  (b) `LoanApp_roles_fixA1A2A3_s{1-4}_<pair>_kunlim`, `--fix-final-step`, gamma 0.99, 44 runs.
+- Wall time: two sweeps in parallel, 02:29-07:12, 4 h 43 min each; 6.0-7.2 min per run. No failures:
+  88 runs OK, each with a 100,353-line trace, "Model saved" in the run log, one TensorBoard dir and
+  one model.
+- Disk: free space on C: 69 -> 64 GB; `--fast-io` copies in `~/dcr_io/loan_{a,b}` (1.2 GB) still there.
+- Both reward checks are already analysed: `analysis/Reward_check_expense_results.md` (3 Nov sweeps,
+  script `reward_check_expense.py`) and `analysis/Reward_check_loan_results.md` (these sweeps, script
+  `reward_check_loan.py`).
+
