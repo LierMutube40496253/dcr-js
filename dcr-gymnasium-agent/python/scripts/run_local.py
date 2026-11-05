@@ -53,16 +53,20 @@ def weights_sweep_pairs() -> list[tuple[float, float]]:
 def switch_tag(args) -> str:
     """Short tag for the special-course switches, '' when all are off (her baseline).
     e.g. masked_fixA2A3B1 = MaskablePPO + truncation fix + false-accept fix + budget in mask;
-    shapeFix (shapeFixNoProg without the progress term); g<gamma> when gamma is not 0.99."""
+    shapeFix (shapeFixNoProg without the progress term); g<gamma> when gamma is not 0.99;
+    psRandom / psTrace for partway starts."""
     parts = ["masked"] if args.algo == "maskable_ppo" else []
     fixes = "".join(code for code, on in (("A1", args.fix_final_step), ("A2", args.truncation_fix),
-                                          ("A3", args.fix_false_accept), ("B1", args.budget_in_mask)) if on)
+                                          ("A3", args.fix_false_accept), ("B1", args.budget_in_mask),
+                                          ("D1", args.fix_dead_end)) if on)
     if fixes:
         parts.append(f"fix{fixes}")
     if args.shaping_fix:
         parts.append("shapeFixNoProg" if args.no_progress else "shapeFix")
     if args.gamma != 0.99:
         parts.append(f"g{float(args.gamma)}".replace(".", "p"))
+    if args.partway_starts != "none":
+        parts.append("ps" + args.partway_starts.capitalize())
     return "_".join(parts)
 
 
@@ -178,6 +182,18 @@ def run_one(args, xml: Path, seed: int, alpha: float, eps: float) -> bool:
                     train_cmd += ["--truncation-fix"]
                 if args.gamma != 0.99:
                     train_cmd += ["--gamma", str(args.gamma)]
+                if args.fix_dead_end:
+                    train_cmd += ["--fix-dead-end"]
+                if args.partway_starts != "none":
+                    train_cmd += ["--partway-starts", args.partway_starts,
+                                  "--partway-initial-share", str(args.partway_initial_share),
+                                  "--partway-prob", str(args.partway_prob),
+                                  "--partway-max", str(args.partway_max),
+                                  "--partway-graph", xml.stem]
+                    if args.partway_trace_file:
+                        train_cmd += ["--partway-trace-file", str(args.partway_trace_file.expanduser().resolve())]
+                    if args.partway_timelimit_factor is not None:
+                        train_cmd += ["--partway-timelimit-factor", str(args.partway_timelimit_factor)]
                 print("Launching trainer:", " ".join(train_cmd), flush=True)
                 ret = subprocess.run(
                     train_cmd,
@@ -246,6 +262,16 @@ def main():
                         help="with --shaping-fix: adapter SHAPING_NO_PROGRESS=1 (no progress term)")
     parser.add_argument("--gamma", type=float, default=0.99,
                         help="discount factor for the agent and SHAPING_GAMMA (0.99 = her runs)")
+    parser.add_argument("--fix-dead-end", action="store_true",
+                        help="issue D1: a dead end ends the episode as terminated, not accepting")
+    parser.add_argument("--partway-starts", choices=["none", "random", "trace"], default="none",
+                        help="E1.4b: replay a prefix through the engine before each episode "
+                             "(none = current behaviour); see train_agent.py for the options")
+    parser.add_argument("--partway-initial-share", type=float, default=0.2)
+    parser.add_argument("--partway-prob", type=float, default=1.0)
+    parser.add_argument("--partway-max", type=int, default=20)
+    parser.add_argument("--partway-trace-file", type=Path, default=None)
+    parser.add_argument("--partway-timelimit-factor", type=float, default=None)
     args = parser.parse_args()
     if args.no_progress and not args.shaping_fix:
         parser.error("--no-progress only applies with --shaping-fix")

@@ -12,6 +12,8 @@ The switches (all OFF by default, so off = Sofía's behaviour):
 | `SHAPING_NO_PROGRESS=1` | adapter env var; `run_local.py --no-progress` (needs `--shaping-fix`) | baseline | `SHAPING_FIX` reward without the progress term. |
 | `--gamma g` | `train_agent.py`, `run_local.py` | | PPO discount factor; default 0.99 = SB3 default = her runs. `run_local.py` passes it to the trainer only when not 0.99. |
 | `BUDGET_IN_MASK=1` | adapter env var; `run_local.py --budget-in-mask` | B1 | Expert pairs are 0 in the action mask once the Expert budget is used up. The budget gate itself is unchanged. |
+| `--fix-dead-end` | `train_agent.py`, `run_local.py` (tag: `D1` in the fix codes, e.g. `fixA2A3D1`) | D1 | Masked or not, a non-accepting marking with no enabled event ends the episode as terminated (no bootstrapping), not accepting, no +100. Takes precedence over the masked `dead_end_truncate` below. Logged in the `dead_end` trace column. |
+| `--partway-starts {none,random,trace}` | `train_agent.py`, `run_local.py` (tags `psRandom`, `psTrace`) | E1.4b | Replays a prefix before the episode through the adapter's new `/replay` route: no reward, no cost, no episode step, not stored for training. `--partway-initial-share` (0.2) of episodes always start at the initial marking; results use `start_type = initial` only. Random: with `--partway-prob` (1.0), a random legal prefix of length 1..`--partway-max` (20), cut short before an accepting marking or a dead end. Trace: one frontier j per trace from `--partway-trace-file` (default `l_min_trace` in `analysis/E1_3_state_counts.csv`), see `src/envs/partway.py`; optional `--partway-timelimit-factor`. The trace CSV gets `start_type`, `prefix_len`, `partway_trace`, `partway_j`; j over time is in `scripts/logs/partway_frontier_exp_<run>.csv`. With `none`, `/replay` is never called and the CSV format is unchanged. |
 | `--algo maskable_ppo` | `train_agent.py`, `run_local.py` | (masking) | sb3-contrib MaskablePPO with the same hyperparameters as PPO; masks from `DCRGymEnv.action_masks()` (the adapter's `actionMask`, never the `state_to_mask` fallback, issue B2). Also turns on dead-end handling (below). |
 | dead-end handling (`DCRGymEnv(dead_end_truncate=True)`, on with `--algo maskable_ppo` only) | `dcr_env.py`, `train_agent.py` | (masking) | A non-accepting marking with no allowed action (all-zero mask) ends the episode as truncated, not accepting, no +100. Logged in a `dead_end` trace column (masked runs only) and counted per run ("Dead-end episodes: N of M" at the end of the run log). |
 
@@ -76,6 +78,18 @@ python scripts/special_course_tests/test_g_shaping_paths.py
 #    the Junior final step must earn more than the Expert one, each equal to
 #    -Phi(before) - cost x multiplier / maxCost + 100. Port 5019, a few seconds.
 python scripts/special_course_tests/test_h_shaping_roles.py
+
+# i. E1.4b: for every prefix of an accepting trace (Expense Report, Synthetic_chain_40), /replay
+#    gives the same marking and mask as playing the events, and no reward; the next step counts as
+#    step 1 with only its own cost. Illegal prefix: HTTP 400 naming the event; after the first
+#    action: HTTP 409. Environment: initial share, start_type, prefix_len, random prefixes, time
+#    limit. Port 5020, under a minute.
+python scripts/special_course_tests/test_i_prefix_replay.py
+
+# j. E1.4b: frontier with a fake success stream (back at >= 0.8 over 20 episodes at j, forward at
+#    <= 0.15 when below the start value, limits, other prefix lengths ignored, geometric offset),
+#    then through the environment on Synthetic_chain_40. Port 5020, a few seconds.
+python scripts/special_course_tests/test_j_frontier.py
 ```
 
 ## Results, 24 Oct 2026 (Windows .venv; c also run in WSL .venv-linux with identical numbers)
@@ -113,4 +127,14 @@ byte-identical bundle, so the committed bundle differs from hers only by the swi
 | b, c (3 variants), d, e, f | PASS, same numbers as 24 and 26 Oct (c and e need `PYTHONIOENCODING=utf-8` when output is redirected to a file on Windows: the trainer prints a "->" arrow character) |
 | g | PASS: with progress: P1 99.928571, P2 98.985714, D 98.950000 (= 100 - 50/700, 100 - 710/700, 100 - 735/700); progress terms [-4, 2, 2], [-4, 4], [-4, 2, 2]. Without progress: same totals, all progress terms 0. Dead end, gamma 1 and 0.99: progress 0, reward -1 |
 | h | PASS: walk seed 1, 21 steps, final Assess loan risk (base cost 318, maxCost 767), 1 pending before: Junior 101.709778 (cost -0.290222) > Expert 101.170795 (cost -0.829205), each = 0.99 x 0 + 2 - cost + 100 |
+
+## Results, 5 Nov 2026 (--fix-dead-end, --partway-starts added; Windows .venv, PYTHONIOENCODING=utf-8)
+
+| Test | Result |
+| --- | --- |
+| a | PASS: 2,048 rows each, identical row for row to fe01d1c (all switches off) |
+| b, c (3 variants), d, f, g, h | PASS, same numbers as 3 Nov |
+| e | PASS, as before; new part D1, with dead_end_truncate on and off: terminated=True, truncated=False, not accepting, reward -0.5 (no shaping in this test) |
+| i | PASS: same marking and mask for every prefix on both graphs, no reward in the answer; next step episodeSteps=1, only its own cost; illegal prefix 400, after first action 409; trace mode 55 of 300 resets initial; random prefix lengths 1..6 with max 6; time limit 2 x 1 + 10 = 12 steps, truncated |
+| j | PASS: all frontier rules with the fake stream; P(k = 0) = 0.502; environment: 20 finished partway episodes move j from 4 to 3 |
 

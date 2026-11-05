@@ -265,6 +265,20 @@ var RLDCREnvironment = class {
     }
     return Array.from(enabledEvents);
   }
+  // Special course (E1.4b partway starts): execute events before the episode begins, with the
+  // same enabled rule and executeS as step(), but no reward and no step counted. Stops at the
+  // first event that is not enabled and reports it.
+  replayPrefix(events) {
+    let replayed = 0;
+    for (const event of events) {
+      if (!this.getValidActions().includes(event)) {
+        return { state: this.getState(), replayed, illegalEvent: event };
+      }
+      executeS(event, this.graph);
+      replayed++;
+    }
+    return { state: this.getState(), replayed, illegalEvent: null };
+  }
   step(action) {
     const validActions = this.getValidActions();
     const isCompliant = validActions.includes(action);
@@ -473,6 +487,42 @@ app.post("/reset", (_req, res) => {
       costMap: graph.costMap,
       durationMap: graph.durationMap,
       roleMultipliers: graph.roleMultipliers
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+app.post("/replay", (req, res) => {
+  try {
+    const events = req.body?.events;
+    if (!Array.isArray(events)) {
+      return res.status(400).json({ ok: false, error: "events (array) required" });
+    }
+    if (episodeSteps !== 0) {
+      return res.status(409).json({ ok: false, error: "replay is only allowed before the first action of an episode" });
+    }
+    let replayed = 0;
+    for (const name of events.map(String)) {
+      const enabled = getValidActions();
+      const event = graph.events.has(name) ? name : enabled.find((ev) => graph.labelMap[ev] === name) ?? name;
+      const step = env.replayPrefix([event]);
+      if (step.illegalEvent !== null) {
+        return res.status(400).json({ ok: false, error: `prefix event not enabled: ${name}`, illegalEvent: name, replayed });
+      }
+      replayed += step.replayed;
+    }
+    const pairs = getEventRolePairs();
+    const validActions = getValidActions();
+    res.json({
+      ok: true,
+      replayed,
+      state: getState(),
+      validActions,
+      actionMask: buildActionMask(pairs, validActions),
+      accepting: isAcceptingS(graph, graph),
+      pendingAfter: countPendingIncluded(getState()),
+      expertBudgetRemaining,
+      labelMap: graph.labelMap
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err) });

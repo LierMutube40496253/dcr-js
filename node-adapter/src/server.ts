@@ -160,6 +160,46 @@ app.post("/reset", (_req, res) => {
   }
 });
 
+// Special course (E1.4b partway starts): after /reset and before the first /action, replay events
+// (ids or labels) through the engine. No reward, no cost, no episode step, no change to the
+// episode's counters; the agent's episode starts from the resulting marking.
+app.post("/replay", (req, res) => {
+  try {
+    const events = req.body?.events;
+    if (!Array.isArray(events)) {
+      return res.status(400).json({ ok: false, error: "events (array) required" });
+    }
+    if (episodeSteps !== 0) {
+      return res.status(409).json({ ok: false, error: "replay is only allowed before the first action of an episode" });
+    }
+    let replayed = 0;
+    for (const name of events.map(String)) {
+      // An id, or a label: labels need not be unique, so take the enabled event with that label
+      const enabled = getValidActions();
+      const event = graph.events.has(name)
+        ? name
+        : enabled.find(ev => graph.labelMap[ev] === name) ?? name;
+      const step = env.replayPrefix([event]);
+      if (step.illegalEvent !== null) {
+        return res.status(400).json({ ok: false, error: `prefix event not enabled: ${name}`, illegalEvent: name, replayed });
+      }
+      replayed += step.replayed;
+    }
+    const pairs = getEventRolePairs();
+    const validActions = getValidActions();
+    res.json({
+      ok: true, replayed, state: getState(), validActions,
+      actionMask: buildActionMask(pairs, validActions),
+      accepting: isAcceptingS(graph, graph),
+      pendingAfter: countPendingIncluded(getState()),
+      expertBudgetRemaining,
+      labelMap: graph.labelMap,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
 app.get("/state", (_req, res) => {
   try {
     const state = getState();

@@ -19,6 +19,7 @@ if __package__ is None:
         sys.path.insert(0, src_root)
 
 from envs.dcr_env import DCRGymEnv
+from envs.partway import load_traces
 
 
 class StepDebugCallback(BaseCallback):
@@ -37,8 +38,13 @@ class StepDebugCallback(BaseCallback):
         self._csv_file = None
         self._writer = None
         # Dead-end logging only for masked runs, so her CSV format is unchanged otherwise
-        self.log_dead_ends = getattr(env_ref, "dead_end_truncate", False)
+        self.log_dead_ends = getattr(env_ref, "dead_end_truncate", False) or getattr(env_ref, "fix_dead_end", False)
         self.dead_end_episodes = 0
+        # E1.4b: start columns and a frontier log only for partway runs, her CSV format otherwise
+        self.log_partway = getattr(env_ref, "partway_starts", "none") != "none"
+        self.frontier_csv_path = csv_path.with_name(csv_path.name.replace("train_trace_", "partway_frontier_"))
+        self._frontier_file = None
+        self._frontier_writer = None
 
     def _on_training_start(self) -> None:
         self.csv_path.parent.mkdir(parents=True, exist_ok=True)
@@ -81,9 +87,17 @@ class StepDebugCallback(BaseCallback):
                 "intercepted_reason",
                 "expert_budget_remaining",
                 "expert_budget_initial",
-            ] + (["dead_end"] if self.log_dead_ends else []),
+            ] + (["dead_end"] if self.log_dead_ends else [])
+              + (["start_type", "prefix_len", "partway_trace", "partway_j"] if self.log_partway else []),
         )
         self._writer.writeheader()
+        if self.log_partway and self.env_ref.partway_frontiers:
+            self._frontier_file = open(self.frontier_csv_path, "w", newline="")
+            self._frontier_writer = csv.writer(self._frontier_file)
+            self._frontier_writer.writerow(["global_timestep", "episode", "trace", "j_old", "j_new", "success_rate"])
+            for i, frontier in enumerate(self.env_ref.partway_frontiers):
+                self._frontier_writer.writerow([0, 0, i, frontier.j, frontier.j, ""])
+            self._frontier_file.flush()
 
     def _on_step(self) -> bool:
         infos = self.locals.get("infos") or []
@@ -169,6 +183,17 @@ class StepDebugCallback(BaseCallback):
             row["dead_end"] = bool(info.get("dead_end", False))
             if row["dead_end"]:
                 self.dead_end_episodes += 1
+        if self.log_partway:
+            row["start_type"] = info.get("start_type", "")
+            row["prefix_len"] = info.get("prefix_len", "")
+            row["partway_trace"] = info.get("partway_trace", "")
+            row["partway_j"] = info.get("partway_j", "")
+            move = info.get("partway_frontier_move")
+            if move:
+                trace, j_old, j_new, rate = move
+                self._frontier_writer.writerow([int(self.num_timesteps), self.episode_idx, trace, j_old, j_new, rate])
+                self._frontier_file.flush()
+                self.logger.record(f"partway/j_trace{trace}", j_new)
         self._writer.writerow(row)
 
         if (self.num_timesteps % self.log_every == 0) or done:
@@ -216,8 +241,11 @@ class StepDebugCallback(BaseCallback):
     def _on_training_end(self) -> None:
         if self._csv_file is not None:
             self._csv_file.close()
+        if self._frontier_file is not None:
+            self._frontier_file.close()
         if self.log_dead_ends:
-            print(f"Dead-end episodes (truncated, no allowed action): {self.dead_end_episodes} "
+            how = "terminated" if getattr(self.env_ref, "fix_dead_end", False) else "truncated"
+            print(f"Dead-end episodes ({how}, no allowed action): {self.dead_end_episodes} "
                   f"of {self.episode_idx - 1}")
 
 
@@ -232,6 +260,13 @@ def train(
     algo: str = "ppo",
     truncation_fix: bool = False,
     gamma: float = 0.99,
+    fix_dead_end: bool = False,
+    partway_starts: str = "none",
+    partway_initial_share: float = 0.2,
+    partway_prob: float = 1.0,
+    partway_max: int = 20,
+    partway_traces: list | None = None,
+    partway_timelimit_factor: float | None = None,
 ):
     ts = time.strftime("%Y%m%dT%H%M%S")
     run_name = f"exp_{exp_id}_{ts}"
@@ -253,6 +288,16 @@ def train(
         print(f"Truncation fix: on (step limit -> truncated)")
     if gamma != 0.99:
         print(f"Gamma:          {gamma}")
+    if fix_dead_end:
+        print(f"Dead ends:      terminated, not accepting (D1)")
+    if partway_starts != "none":
+        print(f"Partway starts: {partway_starts}")
+        print(f"Partway initial share: {partway_initial_share}")
+        if partway_starts == "random":
+            print(f"Partway prob, max: {partway_prob}, {partway_max}")
+        else:
+            print(f"Partway traces: {partway_traces}")
+            print(f"Partway time limit factor: {partway_timelimit_factor}")
     print(f"---------------------------")
 
     logs_dir = out_dir.parent / "scripts" / "logs"
@@ -265,7 +310,10 @@ def train(
     def make_env(seed_offset: int):
         def _init():
             e = DCRGymEnv(node_url=node_url, truncation_fix=truncation_fix,
-                          dead_end_truncate=(algo == "maskable_ppo"))
+                          dead_end_truncate=(algo == "maskable_ppo"), fix_dead_end=fix_dead_end,
+                          partway_starts=partway_starts, partway_initial_share=partway_initial_share,
+                          partway_prob=partway_prob, partway_max=partway_max, partway_traces=partway_traces,
+                          partway_timelimit_factor=partway_timelimit_factor, partway_seed=seed + seed_offset)
             # Ensure each env instance gets a deterministic seed.
             e.reset(seed=seed + seed_offset)
             return Monitor(e)
@@ -331,8 +379,28 @@ if __name__ == "__main__":
                         help="issue A2: report the step limit as truncated, not terminated")
     parser.add_argument("--gamma", type=float, default=0.99,
                         help="discount factor (0.99 = SB3 default, her runs)")
+    parser.add_argument("--fix-dead-end", action="store_true",
+                        help="issue D1: a dead end ends the episode as terminated, not accepting")
+    parser.add_argument("--partway-starts", choices=["none", "random", "trace"], default="none",
+                        help="E1.4b: replay a prefix before the episode (none = her behaviour)")
+    parser.add_argument("--partway-initial-share", type=float, default=0.2,
+                        help="share of episodes that always start at the initial marking")
+    parser.add_argument("--partway-prob", type=float, default=1.0,
+                        help="random mode: probability of a prefix for the other episodes")
+    parser.add_argument("--partway-max", type=int, default=20,
+                        help="random mode: prefix length is uniform on 1..max")
+    parser.add_argument("--partway-trace-file", type=Path, default=None,
+                        help="trace mode: JSON list of event-label lists (default: l_min_trace from "
+                             "analysis/E1_3_state_counts.csv for --partway-graph)")
+    parser.add_argument("--partway-graph", type=str, default=None,
+                        help="trace mode: graph name in the E1.3 CSV, e.g. Synthetic_chain_40")
+    parser.add_argument("--partway-timelimit-factor", type=float, default=None,
+                        help="trace mode: partway episode limit = F x (events left in trace) + 10 (default off)")
 
     args = parser.parse_args()
+    traces = None
+    if args.partway_starts == "trace":
+        traces = load_traces(args.partway_trace_file, args.partway_graph)
     train(
         node_url=args.node_url,
         exp_id=args.exp_id,
@@ -344,4 +412,11 @@ if __name__ == "__main__":
         algo=args.algo,
         truncation_fix=args.truncation_fix,
         gamma=args.gamma,
+        fix_dead_end=args.fix_dead_end,
+        partway_starts=args.partway_starts,
+        partway_initial_share=args.partway_initial_share,
+        partway_prob=args.partway_prob,
+        partway_max=args.partway_max,
+        partway_traces=traces,
+        partway_timelimit_factor=args.partway_timelimit_factor,
     )

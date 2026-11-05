@@ -204,6 +204,21 @@ class RLDCREnvironment {
         return Array.from(enabledEvents);
     }
 
+    // Special course (E1.4b partway starts): execute events before the episode begins, with the
+    // same enabled rule and executeS as step(), but no reward and no step counted. Stops at the
+    // first event that is not enabled and reports it.
+    replayPrefix(events: string[]): { state: any, replayed: number, illegalEvent: string | null } {
+        let replayed = 0;
+        for (const event of events) {
+            if (!this.getValidActions().includes(event)) {
+                return { state: this.getState(), replayed, illegalEvent: event };
+            }
+            executeS(event, this.graph);
+            replayed++;
+        }
+        return { state: this.getState(), replayed, illegalEvent: null };
+    }
+
     step(action: string): {
         action: string; 
         state: any, 

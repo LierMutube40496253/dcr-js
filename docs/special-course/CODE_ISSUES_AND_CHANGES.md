@@ -38,7 +38,7 @@ Commit dbd7c49, branch feature/cost-roles. Line numbers as of 21 Oct.
 | # | Issue | Location | Effect / decision |
 | --- | --- | --- | --- |
 | M1 | A Loan Application case is accepted right after Assess loan risk, without a decision: the decision events (Approve, Reject, Cancel, Design offer) only have conditions from Assess loan risk, no response | app/public/examples/diagrams/LoanApp_junior_senior.xml | Learned traces stop after the risk assessment (99.9% of accepting episodes, 22 Oct runs). Question 5 for Hugo. Possible fix: response Assess loan risk -> Approve application, with Reject and Cancel excluding Approve application |
-| D1 | Dead ends in masked runs (non-accepting marking, no allowed action) currently end as truncated, so SB3 bootstraps a value for a state that has no future | dcr_env.py (dead-end handling, commit b37e17f) | OPEN, decide before the next runs. Recommendation: terminated and not accepting (value 0). No dead ends seen so far (smoke tests, E1.3 random walks) |
+| D1 | Dead ends in masked runs (non-accepting marking, no allowed action) end as truncated, so SB3 bootstraps a value for a state that has no future; in unmasked runs the agent is blocked until the step limit | dcr_env.py (dead-end handling, commit b37e17f) | **Fixed behind a switch** (`--fix-dead-end`, tag `D1`), 5 Nov; test e. Masked or not: terminated, not accepting, no +100. Off keeps both old behaviours. No dead ends seen so far (smoke tests, E1.3 random walks) |
 
 ## Switches added (24 Oct, all off by default; tests in TESTS.md)
 
@@ -50,6 +50,8 @@ Commit dbd7c49, branch feature/cost-roles. Line numbers as of 21 Oct.
 | `--algo maskable_ppo` (`train_agent.py`, `run_local.py`) | masking (replaces B2 for masked runs) | dcr_env.py action_masks(), train_agent.py; sb3-contrib 2.7.1 in requirements.txt |
 | `FIX_FINAL_STEP=1` (adapter env; `run_local.py --fix-final-step`), 26 Oct | A1 | dcr-engine/src/reward.ts, node-adapter/src/server.ts |
 | `SHAPING_FIX=1` (adapter env; `run_local.py --shaping-fix`), 3 Nov; with `SHAPING_GAMMA` (`--gamma`) and `SHAPING_NO_PROGRESS=1` (`--no-progress`) | A1 and the Expense Report reward-scale problem (cheap path loses to the short one, `analysis/A1_A3_switch_results.md`) | reward.ts computeStepReward (shaping branch, shared objectivePenalties), server.ts /action (dead-end flag, no step penalty) |
+| `--fix-dead-end` (`train_agent.py`, `run_local.py`), 5 Nov | D1 | dcr_env.py step() |
+| `--partway-starts` and its options (`train_agent.py`, `run_local.py`), 5 Nov | E1.4b | generation.ts replayPrefix; server.ts new `/replay` route (`/reset` and `/action` unchanged); node_connector.py; dcr_env.py reset(), step(); new src/envs/partway.py; train_agent.py callback |
 | `--gamma` (`train_agent.py`, `run_local.py`), 3 Nov | (discount factor, default 0.99 = hers) | train_agent.py train(); run_local.py tag `g<gamma>` |
 
 With all switches off, a 2,048-step run is identical row for row to commit fe01d1c (test a).
@@ -82,9 +84,7 @@ engine's 100-legal-step accept) a fake accept still gets +100 here; combine with
 | SC-D2, E1.6 state abstraction | dcr_env.py | _state_to_obs | Drop bits that never change; optionally merge markings with the same enabled and pending sets |
 | SC-D2, E1.7 factored actions | server.ts getEventRolePairs; dcr_env.py action_space | | Event first, then role (MultiDiscrete) |
 | SC-D2, runs on Windows/HPC | run_experiments.py | free_adapter_port, adapter launch | Cross-platform launcher (no lsof, no bash/nvm), one adapter per run/port (B4, B5) |
-| E1.4b partway starts (and thesis) | generation.ts | RLDCREnvironment.reset | Accept a prefix of events and replay it; report the first illegal event if any (6.4% of her log) |
-| E1.4b partway starts (and thesis) | server.ts | /reset route | Read an optional prefix (and weights) from the request body and pass it on |
-| E1.4b partway starts (and thesis) | dcr_env.py | reset(options) | Pass options={"prefix": [...]} to the adapter; sample prefixes from the log during training |
+| E1.4b partway starts (done 5 Nov; also for the thesis) | generation.ts; server.ts; dcr_env.py; partway.py | RLDCREnvironment.replayPrefix; new route /replay; reset(), step() | Replays a prefix (ids or labels), reports the first illegal event; a separate route, so /reset stays as it was. Decisions not in the design notes: --partway-prob default 1.0, --partway-max default 20; k = 0, 1, 2, ...; the window is emptied when j moves and only moves when full; a prefix of length 0 logs as `initial`; a random prefix stops before an accepting marking or dead end. With a prefix, the first step's progress term includes -Phi(start marking), so a case's terms add up to -Phi(start) instead of 0; a constant per start, the policy is unaffected |
 | Thesis (was SC-D3), choose the trade-off | server.ts | COST_WEIGHT / DURATION_WEIGHT (lines 37-38) | Today fixed at start-up, so one policy per weight pair. Either pick the matching trained policy, or send weights per reset and add them to the observation |
 | Thesis (was SC-D3), recommender | new file, e.g. src/recommend.py | | Given a prefix and weights: replay, list enabled next activities, rank them with the policy and rollouts, return expected remaining cost and duration |
 | Thesis (was SC-D3), exact check | minizinc_ground_truth/dcrjs_converter.py | | Write the marking after the prefix as the initial marking, then run the solver |

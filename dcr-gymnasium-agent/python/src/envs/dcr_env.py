@@ -13,6 +13,7 @@ if __package__ is None:
         sys.path.insert(0, src_root)
 
 from utils.node_connector import connect_to_dcr_environment
+from envs.partway import TraceFrontier
 
 def state_to_obs(state, event_list):
     obs = []
@@ -33,7 +34,9 @@ def state_to_mask(state, event_list):
 class DCRGymEnv(gym.Env):
     metadata = {"render.modes": []}
 
-    def __init__(self, node_url="http://localhost:5001", truncation_fix=False, dead_end_truncate=False):
+    def __init__(self, node_url="http://localhost:5001", truncation_fix=False, dead_end_truncate=False,
+                 fix_dead_end=False, partway_starts="none", partway_initial_share=0.2, partway_prob=1.0,
+                 partway_max=20, partway_traces=None, partway_timelimit_factor=None, partway_seed=0):
         super().__init__()
         # Special-course switch (issue A2), off by default: when on, step() returns
         # terminated = real acceptance and truncated = step limit reached without acceptance.
@@ -41,6 +44,21 @@ class DCRGymEnv(gym.Env):
         # Special-course switch for masked runs, off by default: a non-accepting marking with no
         # allowed action (all-zero adapter mask) ends the episode as truncated, not accepting.
         self.dead_end_truncate = dead_end_truncate
+        # Special-course switch (issue D1), off by default: masked or not, a non-accepting marking
+        # with no enabled event ends the episode as terminated (no future, value 0), not accepting.
+        # Takes precedence over dead_end_truncate.
+        self.fix_dead_end = fix_dead_end
+        # Special-course E1.4b partway starts, "none" by default (see reset() and envs/partway.py).
+        self.partway_starts = partway_starts
+        self.partway_initial_share = partway_initial_share
+        self.partway_prob = partway_prob
+        self.partway_max = partway_max
+        self.partway_traces = partway_traces or []
+        self.partway_timelimit_factor = partway_timelimit_factor
+        self.partway_frontiers = [TraceFrontier(len(t)) for t in self.partway_traces]
+        self._partway_rng = np.random.default_rng(partway_seed)  # separate from the agent's RNG
+        self.start_type, self.prefix_len, self.partway_trace = "initial", 0, None
+        self._episode_limit, self._episode_steps = None, 0
         self.node = connect_to_dcr_environment(node_url)
         init = self.node["reset"]()
         events = init["events"]
@@ -67,7 +85,13 @@ class DCRGymEnv(gym.Env):
         self._adapter_mask = self.action_mask  # raw adapter mask for action_masks(), no fallback
         if self.action_mask is None:
             self.action_mask = state_to_mask(init.get("state", {}), self.event_list)
-
+        if partway_starts == "trace":
+            if not self.partway_traces:
+                raise ValueError("partway_starts='trace' needs partway_traces")
+            for trace in self.partway_traces:  # a demonstration must be legal and end accepting
+                self.node["reset"]()
+                if not self.node["replay"](trace)["accepting"]:
+                    raise ValueError(f"demonstration does not reach an accepting marking: {trace}")
 
     def _state_to_obs(self, state, expert_budget_remaining=None):
         arr = []
@@ -81,8 +105,79 @@ class DCRGymEnv(gym.Env):
             arr.append(min(1.0, max(0.0, frac)))
         return np.array(arr, dtype=np.float32 if self.expert_budget_k is not None else np.int8)
 
+    def _partway_start(self, r):
+        """Replay a prefix before the episode (no reward, no cost, no step, nothing for training).
+        Takes the /reset answer, returns the answer describing the marking the episode starts from."""
+        rng = self._partway_rng
+        self.start_type, self.prefix_len, self.partway_trace = "initial", 0, None
+        self._episode_limit, self._episode_steps = None, 0
+        if rng.random() < self.partway_initial_share:
+            return r
+        if self.partway_starts == "random":
+            if rng.random() >= self.partway_prob:
+                return r
+            r = self._random_prefix(r, int(rng.integers(1, self.partway_max + 1)))
+        else:  # trace
+            self.partway_trace = int(rng.integers(len(self.partway_traces)))
+            trace = self.partway_traces[self.partway_trace]
+            self.prefix_len = self.partway_frontiers[self.partway_trace].sample_prefix_len(rng)
+            if self.prefix_len > 0:
+                r = self.node["replay"](trace[:self.prefix_len])
+            if self.partway_timelimit_factor is not None:
+                self._episode_limit = self.partway_timelimit_factor * (len(trace) - self.prefix_len) + 10
+        self.start_type = "partway" if self.prefix_len > 0 else "initial"
+        return r
+
+    def _random_prefix(self, r, length):
+        """A random legal prefix, one event at a time. A prefix must leave work for the agent, so
+        an event that reaches an accepting marking or a dead end is undone and the prefix ends."""
+        chosen = []
+        for _ in range(length):
+            enabled = self._enabled_events(r)
+            if not enabled:
+                break
+            event = enabled[int(self._partway_rng.integers(len(enabled)))]
+            after = self.node["replay"]([event])
+            if after["accepting"] or not after["validActions"]:
+                r = self.node["reset"]()
+                if chosen:
+                    r = self.node["replay"](chosen)
+                break
+            chosen.append(event)
+            r = after
+        self.prefix_len = len(chosen)
+        return r
+
+    def _enabled_events(self, r):
+        if "validActions" in r:
+            return r["validActions"]
+        mask = r.get("actionMask") or []  # the /reset answer: first role of each enabled event
+        return list(dict.fromkeys(p["event"] for p, m in zip(self.event_role_pairs, mask) if m))
+
+    def _partway_step(self, info, result, terminated, truncated):
+        """Per-episode log fields, optional shorter limit, frontier update at the end of an episode."""
+        self._episode_steps += 1
+        if (self._episode_limit is not None and self._episode_steps >= self._episode_limit
+                and not terminated and not truncated):
+            truncated = True
+            info["partway_timelimit"] = True
+        info["start_type"] = self.start_type
+        info["prefix_len"] = self.prefix_len
+        info["partway_trace"] = self.partway_trace
+        if self.partway_trace is not None:
+            frontier = self.partway_frontiers[self.partway_trace]
+            info["partway_j"] = frontier.j
+            if terminated or truncated:
+                success = bool(result.get("accepting", False)) and result.get("pendingAfter", 0) == 0
+                move = frontier.record(self.prefix_len, success)
+                if move:
+                    info["partway_frontier_move"] = (self.partway_trace, *move)
+        return truncated
+
     def reset(self, seed=None, options=None):
         r = self.node["reset"]()
+        if self.partway_starts != "none":
+            r = self._partway_start(r)
         self.expert_budget_remaining = r.get("expertBudgetRemaining")
         obs = self._state_to_obs(r["state"], self.expert_budget_remaining)
         self.label_map = r.get("labelMap", self.label_map)
@@ -122,17 +217,21 @@ class DCRGymEnv(gym.Env):
             "expert_budget_initial":   result.get("expertBudgetInitial"),
             "num_budget_blocks":       result.get("numBudgetBlocks"),
         }
-        if self.dead_end_truncate:
+        terminated, truncated = done, False
+        dead_end = False
+        if self.dead_end_truncate or self.fix_dead_end:
             mask = self._adapter_mask
-            info["dead_end"] = (not done and not result.get("accepting", False)
-                                and mask is not None and not any(mask))
-            if info["dead_end"]:
-                return obs, reward, False, True, info
-        if self.truncation_fix:
+            dead_end = (not done and not result.get("accepting", False)
+                        and mask is not None and not any(mask))
+            info["dead_end"] = dead_end
+        if dead_end:
+            terminated, truncated = (True, False) if self.fix_dead_end else (False, True)
+        elif self.truncation_fix:
             terminated = bool(result.get("accepting", False))
             truncated = done and not terminated  # adapter: done = accepting or maxStepReached
-            return obs, reward, terminated, truncated, info
-        return obs, reward, done, False, info
+        if self.partway_starts != "none":
+            truncated = self._partway_step(info, result, terminated, truncated)
+        return obs, reward, terminated, truncated, info
 
     def action_masks(self):
         """Boolean mask over (event, role) actions for sb3-contrib MaskablePPO, taken from the

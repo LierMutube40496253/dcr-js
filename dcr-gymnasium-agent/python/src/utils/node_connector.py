@@ -10,6 +10,13 @@ def connect_to_dcr_environment(env_url="http://localhost:5001"):
         r.raise_for_status()
         return r.json()
 
+    def replay(events):
+        # Special course (partway starts): an illegal event comes back as HTTP 400 with its name
+        r = session.post(f"{env_url}/replay", json={"events": list(events)})
+        if r.status_code >= 400:
+            raise RuntimeError(f"replay failed: {r.text}")
+        return r.json()
+
     def get_state():
         r = session.get(f"{env_url}/state")
         r.raise_for_status()
@@ -22,6 +29,7 @@ def connect_to_dcr_environment(env_url="http://localhost:5001"):
 
     return {
         "reset": reset,
+        "replay": replay,
         "get_state": get_state,
         "send_action": send_action
     }

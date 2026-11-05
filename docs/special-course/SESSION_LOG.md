@@ -184,3 +184,22 @@ run-id base `LoanApp_roles`, `--weights-sweep` (11 pairs), seeds 1-4, 100,000 st
   script `reward_check_expense.py`) and `analysis/Reward_check_loan_results.md` (these sweeps, script
   `reward_check_loan.py`).
 
+## 5 Nov 2026: larger-graph reward check (144 runs); E1.4b partway starts implemented
+RW_ sweeps (`~/sweeps_4nov_rw.sh`, commit 4ef2be2 code as in 1e61d86), 5 Nov 01:29-08:18, three at a
+time, 5.2-11.6 min per run: 144 of 144 OK, and `~/check_4nov_rw.py` confirmed the switches, graph,
+seed, weights, gamma, algorithm and outputs of every run. Results: `analysis/Reward_check_larger_graphs_results.md`.
+
+Quick check, no training (`node-adapter/scripts/chain_trace_check.ts`, E1.3 files not changed):
+| Graph | Act_Event_1 > ... > 5 | Greedy best-first (fewest included pending first) |
+| --- | --- | --- |
+| Synthetic_chain_60 | legal, does not accept (2 pending left) | found, 213 steps, verified by replay, 205 s |
+| Synthetic_chain_80 | legal, does not accept (3 pending left) | found, 154 steps, verified, 14 s |
+| Synthetic_chain_100 | legal, does not accept (7 pending left) | none in the 10-minute cap (4.7 million markings, never below 3 pending) |
+Traces, not shortest: `analysis/E1_4b_trace_Synthetic_chain_{60,80}.json`, usable with
+`--partway-trace-file`. So 60 and 80 are not unsolvable for trace mode; E1.3 only lacked a trace.
+The design notes are in `SpecialCourse/METHOD_NOTES.md`; the repo copy of that file stops at Oct 26.
+
+Implemented (details in TESTS.md and CODE_ISSUES_AND_CHANGES.md): `--partway-starts {none,random,trace}`
+with `--partway-initial-share`, `--partway-prob`, `--partway-max`, `--partway-trace-file`,
+`--partway-timelimit-factor`; `--fix-dead-end` (D1). Reward not changed. Tests a-j PASS.
+

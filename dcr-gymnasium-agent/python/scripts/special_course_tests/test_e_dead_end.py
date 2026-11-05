@@ -9,6 +9,8 @@ included -> dead end at step 1.
       accepting=False, info["dead_end"]=True; a short MaskablePPO run does not crash, every
       episode is a dead end, and the trace has a dead_end column with the count printed.
   off (her env): the episode does not end, and action_masks() raises on the all-zero mask.
+  fix_dead_end (issue D1, --fix-dead-end), masked or not: terminated=True, truncated=False,
+      accepting=False, no +100.
 
     cd dcr-gymnasium-agent/python
     python scripts/special_course_tests/test_e_dead_end.py
@@ -96,6 +98,15 @@ def main():
               f"'dead_end' column present={'dead_end' in rows[0]}")
         ok &= len(rows) > 0 and len(dead) == len(done_rows) == len(rows)
         ok &= not any(r["accepting"] == "True" for r in rows)
+
+        # 4) fix_dead_end (issue D1), masked or not: terminated, not truncated, not accepting
+        for masked_env in (True, False):
+            env = DCRGymEnv(node_url=url, dead_end_truncate=masked_env, fix_dead_end=True, truncation_fix=True)
+            env.reset()
+            _, reward, terminated, truncated, info = env.step(idx_a)
+            print(f"D1, dead_end_truncate={masked_env}: terminated={terminated} truncated={truncated} "
+                  f"accepting={info['accepting']} dead_end={info['dead_end']} reward={reward}")
+            ok &= terminated and not truncated and not info["accepting"] and info["dead_end"] and reward < 100
     shutil.rmtree(tmp, ignore_errors=True)
     print("PASS" if ok else "FAIL")
     sys.exit(0 if ok else 1)
