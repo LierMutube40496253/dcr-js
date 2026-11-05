@@ -267,6 +267,7 @@ def train(
     partway_max: int = 20,
     partway_traces: list | None = None,
     partway_timelimit_factor: float | None = None,
+    partway_step: int = 1,
 ):
     ts = time.strftime("%Y%m%dT%H%M%S")
     run_name = f"exp_{exp_id}_{ts}"
@@ -298,6 +299,7 @@ def train(
         else:
             print(f"Partway traces: {partway_traces}")
             print(f"Partway time limit factor: {partway_timelimit_factor}")
+            print(f"Partway step: {partway_step}")
     print(f"---------------------------")
 
     logs_dir = out_dir.parent / "scripts" / "logs"
@@ -313,7 +315,8 @@ def train(
                           dead_end_truncate=(algo == "maskable_ppo"), fix_dead_end=fix_dead_end,
                           partway_starts=partway_starts, partway_initial_share=partway_initial_share,
                           partway_prob=partway_prob, partway_max=partway_max, partway_traces=partway_traces,
-                          partway_timelimit_factor=partway_timelimit_factor, partway_seed=seed + seed_offset)
+                          partway_timelimit_factor=partway_timelimit_factor, partway_seed=seed + seed_offset,
+                          partway_step=partway_step)
             # Ensure each env instance gets a deterministic seed.
             e.reset(seed=seed + seed_offset)
             return Monitor(e)
@@ -396,6 +399,8 @@ if __name__ == "__main__":
                         help="trace mode: graph name in the E1.3 CSV, e.g. Synthetic_chain_40")
     parser.add_argument("--partway-timelimit-factor", type=float, default=None,
                         help="trace mode: partway episode limit = F x (events left in trace) + 10 (default off)")
+    parser.add_argument("--partway-step", type=int, default=1,
+                        help="trace mode: events the frontier moves per stage")
 
     args = parser.parse_args()
     traces = None
@@ -419,4 +424,5 @@ if __name__ == "__main__":
         partway_max=args.partway_max,
         partway_traces=traces,
         partway_timelimit_factor=args.partway_timelimit_factor,
+        partway_step=args.partway_step,
     )

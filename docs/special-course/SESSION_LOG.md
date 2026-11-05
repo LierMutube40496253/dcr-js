@@ -213,3 +213,18 @@ asked for, 48 would be exact copies, and cost and duration of accepted cases are
 Sweep script `~/sweeps_5nov_ps.sh` (80 runs; `--w05-only`: 32) ready, not started.
 
 Decision (user, 5 Nov): chain 40 at w = 0.5 only, `~/sweeps_5nov_ps.sh --w05-only`, 32 runs (24 on chain 40, 8 on chain 20).
+
+While the PS_ sweep runs (started 15:16; code at 428a890, not touched):
+- Short traces (`node-adapter/scripts/shorten_trace.ts`: remove one event at a time while the replay stays legal and accepting): chain 60 213 -> 55 events, chain 80 154 -> 77; `analysis/E1_4b_trace_Synthetic_chain_{60,80}_short.json`. No single event can be removed; not proved shortest.
+- `--partway-step N` written and tested in a temporary worktree, `../dcr-js-wt-step` (tests a, i, j PASS; 4 smoke runs OK), NOT yet in this tree: running sweeps start Python from these files. To apply when the sweep ends.
+- Prepared, not started: `~/sweeps_ps6080.sh`, chain 60 and 80, none vs trace, masked, w = 0.5, seeds 1-4, 16 runs; step 3 (18 stages) and step 4 (19 stages); `~/check_ps6080.py`. It refuses to start while training runs or before the step option is applied.
+- Budget note: 20 episodes at each j mean about 50 episodes per stage, of which 10 start at the initial marking (up to 300 steps each). Even with perfect play that is about 74,000 steps on chain 60 and 87,000 on chain 80, so 100,000 steps may not reach j = 0. `STEPS` is at the top of the script.
+
+PS_ sweep finished: 15:16-17:37 (2 h 21 min), 32 of 32 OK with `~/check_5nov_ps.py --w05-only`, no failures. Run ids `PS_Synth40_[masked_]fixA2A3D1_shapeFix_g1p0[_psRandom|_psTrace]_s{1-4}_a0p5_b0p5_kunlim` and `PS_Synth20_masked_fixA2A3D1_shapeFix_g1p0[_psTrace]_s{1-4}_a0p5_b0p5_kunlim`. Results: `analysis/E1_4b_partway_results.md`; scripts `analysis/e1_4b_partway.py`, `analysis/e1_4b_decay_check.py`.
+- Chain 40, accepted from the initial marking, final 20%: masked trace 92-98%, masked none 0-29%, PPO trace 58-80%, PPO none 0-1.5%, random 0% (1 accepted case in 8 runs). j = 0 at 36,338-85,341 masked; 84,041-95,754 PPO, one seed not reached. The demonstration is only 5 events (4 stages).
+- Cost and duration of accepted cases are 0 (chains have none). False finishes 0, dead ends 0 (D1 did not fire).
+- Other traces: chain 40 no, all 8,518 accepted trace-mode cases contain `1 2 3 4 5` in order (44% exactly), and so do all 56 accepted cases without partway starts. Chain 20 yes, all four length-5 orders in all 8 runs.
+- Problem found: chain 20, masked, new reward: acceptance reaches 99.9% at 50-60% of training, then falls to 60% (none) and 34% (trace) in the last bin, while legal steps per case rise from 12-15 to 94, entropy from 1.50 to 2.33, explained variance 0.99. The E1.4 runs (old reward, same entropy) stay at 100%. Likely cause, not tested: no cost, no step penalty and gamma 1 make every finish worth the same, so the entropy bonus takes over. This qualifies the 4-5 Nov reward check, whose Synth20 runs were unmasked and still learning at 100,000 steps. Chain 40's 97% may be before the same fall.
+- Open decision before chain 60/80: test `--ent-coef 0.01` and `--gamma 0.99` on chain 20 first. `~/sweeps_ps6080.sh` not started. Chain 60/80 probably need several hundred thousand steps (extrapolation).
+
+`--partway-step` applied to this tree after the sweep (identical to the worktree files, not committed): tests a, i, j PASS. Temporary worktree and its junction removed. `partway_frontier_exp_*.csv` added to .gitignore, like the other training logs.

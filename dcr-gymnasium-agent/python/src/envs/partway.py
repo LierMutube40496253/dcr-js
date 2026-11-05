@@ -35,14 +35,17 @@ class TraceFrontier:
     """Frontier j of one trace: episodes start after a prefix of length j + k.
 
     Starts at len(trace) - 1 (one event left). Over the last `window` episodes started exactly at j:
-    success rate >= up moves j back by one (longer task), <= down moves it forward by one if j is
-    below its start value. The window is emptied after a move: it only holds episodes at the
-    current j.
+    success rate >= up moves j back by `step` events (longer task), stopping at 0; <= down moves it
+    forward by `step` events if j is below its start value, stopping at the start value. The window
+    is emptied after a move: it only holds episodes at the current j.
     """
 
-    def __init__(self, trace_len, window=20, up=0.8, down=0.15, offset_p=0.5):
+    def __init__(self, trace_len, window=20, up=0.8, down=0.15, offset_p=0.5, step=1):
         if trace_len < 1:
             raise ValueError("empty trace")
+        if step < 1:
+            raise ValueError("step must be at least 1")
+        self.step = step
         self.trace_len = trace_len
         self.start = trace_len - 1
         self.j = self.start
@@ -67,9 +70,9 @@ class TraceFrontier:
         rate = sum(self.results) / len(self.results)
         old = self.j
         if rate >= self.up and self.j > 0:
-            self.j -= 1
+            self.j = max(0, self.j - self.step)
         elif rate <= self.down and self.j < self.start:
-            self.j += 1
+            self.j = min(self.start, self.j + self.step)
         else:
             return None
         self.results.clear()

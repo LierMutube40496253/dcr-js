@@ -54,7 +54,7 @@ def switch_tag(args) -> str:
     """Short tag for the special-course switches, '' when all are off (her baseline).
     e.g. masked_fixA2A3B1 = MaskablePPO + truncation fix + false-accept fix + budget in mask;
     shapeFix (shapeFixNoProg without the progress term); g<gamma> when gamma is not 0.99;
-    psRandom / psTrace for partway starts."""
+    psRandom / psTrace for partway starts (psTraceStep<N> when --partway-step is not 1)."""
     parts = ["masked"] if args.algo == "maskable_ppo" else []
     fixes = "".join(code for code, on in (("A1", args.fix_final_step), ("A2", args.truncation_fix),
                                           ("A3", args.fix_false_accept), ("B1", args.budget_in_mask),
@@ -66,7 +66,7 @@ def switch_tag(args) -> str:
     if args.gamma != 0.99:
         parts.append(f"g{float(args.gamma)}".replace(".", "p"))
     if args.partway_starts != "none":
-        parts.append("ps" + args.partway_starts.capitalize())
+        parts.append("ps" + args.partway_starts.capitalize() + (f"Step{args.partway_step}" if args.partway_step != 1 else ""))
     return "_".join(parts)
 
 
@@ -194,6 +194,8 @@ def run_one(args, xml: Path, seed: int, alpha: float, eps: float) -> bool:
                         train_cmd += ["--partway-trace-file", str(args.partway_trace_file.expanduser().resolve())]
                     if args.partway_timelimit_factor is not None:
                         train_cmd += ["--partway-timelimit-factor", str(args.partway_timelimit_factor)]
+                    if args.partway_step != 1:
+                        train_cmd += ["--partway-step", str(args.partway_step)]
                 print("Launching trainer:", " ".join(train_cmd), flush=True)
                 ret = subprocess.run(
                     train_cmd,
@@ -272,9 +274,12 @@ def main():
     parser.add_argument("--partway-max", type=int, default=20)
     parser.add_argument("--partway-trace-file", type=Path, default=None)
     parser.add_argument("--partway-timelimit-factor", type=float, default=None)
+    parser.add_argument("--partway-step", type=int, default=1)
     args = parser.parse_args()
     if args.no_progress and not args.shaping_fix:
         parser.error("--no-progress only applies with --shaping-fix")
+    if args.partway_step != 1 and args.partway_starts != "trace":
+        parser.error("--partway-step only applies with --partway-starts trace")
     if args.weights_sweep and args.pairs is not None:
         parser.error("--weights-sweep replaces --pairs; give one of them")
 

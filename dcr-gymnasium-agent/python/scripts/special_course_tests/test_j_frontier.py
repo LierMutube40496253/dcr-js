@@ -5,8 +5,9 @@ success stream (no adapter, no training), on a trace of 5 events (j starts at 4)
   moves back, 0.75 does not; 20 failures -> j + 1 only if j is below its start value; a rate of
   exactly 0.15 moves forward, 0.2 does not; episodes started at another prefix length are ignored;
   j never goes below 0 or above its start value. The start is j + k, capped at len(trace) - 1, with
-  P(k = 0) = 0.5. Then the same through the environment, on Synthetic_chain_40: 20 partway episodes
-  finished by the demonstration move j from 4 to 3.
+  P(k = 0) = 0.5. --partway-step N: j moves N events per stage in both directions, stopping at 0
+  and at its start value. Then the same through the environment, on Synthetic_chain_40: 20 partway
+  episodes finished by the demonstration move j from 4 to 3 (step 1) or from 4 to 2 (step 2).
 
     cd dcr-gymnasium-agent/python
     python scripts/special_course_tests/test_j_frontier.py
@@ -81,6 +82,24 @@ def check_logic():
     ok &= min(starts) == 2 and max(starts) <= 8 and abs(p0 - 0.5) < 0.02
     f.j = 8
     ok &= all(f.sample_prefix_len(rng) == 8 for _ in range(200))
+
+    # --partway-step: 8 events, start value 7, step 3
+    f = TraceFrontier(8, step=3)
+    moves = feed(f, [True] * 80)
+    ok &= [m[1] for m in moves] == [4, 1, 0] and f.j == 0      # stops at 0, not -2
+    ok &= feed(f, [True] * 20) == [] and f.j == 0
+    print(f"step 3, successes: j 7 -> {[m[1] for m in moves]}")
+    moves = feed(f, [False] * 80)
+    ok &= [m[1] for m in moves] == [3, 6, 7] and f.j == 7      # stops at the start value, not 9
+    print(f"step 3, failures: j 0 -> {[m[1] for m in moves]}")
+    f = TraceFrontier(8, step=3)
+    ok &= feed(f, [True] * 19) == [] and f.j == 7              # same window rule as step 1
+    ok &= feed(f, [True] * 20, prefix_len=6) == [] and f.j == 7  # an episode inside the stage is not at j
+    try:
+        TraceFrontier(8, step=0)
+        ok = False
+    except ValueError:
+        pass
     return ok
 
 
@@ -100,8 +119,20 @@ def check_env():
             if info.get("partway_frontier_move"):
                 moves.append((episode + 1, info["partway_frontier_move"]))
         print(f"environment: {moves}, j = {env.partway_frontiers[0].j}")
+        ok = ok_start and terminated and moves == [(20, (0, 4, 3, 1.0))] and env.partway_frontiers[0].j == 3
+
+        env = DCRGymEnv(node_url=url, truncation_fix=True, partway_starts="trace", partway_traces=[trace],
+                        partway_initial_share=0.0, partway_seed=1, partway_step=2)
+        moves = []
+        for episode in range(20):
+            env.reset()
+            _, _, _, _, info = env.step(index[trace[env.prefix_len]])
+            if info.get("partway_frontier_move"):
+                moves.append((episode + 1, info["partway_frontier_move"]))
+        print(f"environment, step 2: {moves}, j = {env.partway_frontiers[0].j}")
+        ok &= moves == [(20, (0, 4, 2, 1.0))] and env.partway_frontiers[0].j == 2
     shutil.rmtree(tmp, ignore_errors=True)
-    return ok_start and terminated and moves == [(20, (0, 4, 3, 1.0))] and env.partway_frontiers[0].j == 3
+    return ok
 
 
 def main():

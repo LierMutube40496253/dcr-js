@@ -36,7 +36,8 @@ class DCRGymEnv(gym.Env):
 
     def __init__(self, node_url="http://localhost:5001", truncation_fix=False, dead_end_truncate=False,
                  fix_dead_end=False, partway_starts="none", partway_initial_share=0.2, partway_prob=1.0,
-                 partway_max=20, partway_traces=None, partway_timelimit_factor=None, partway_seed=0):
+                 partway_max=20, partway_traces=None, partway_timelimit_factor=None, partway_seed=0,
+                 partway_step=1):
         super().__init__()
         # Special-course switch (issue A2), off by default: when on, step() returns
         # terminated = real acceptance and truncated = step limit reached without acceptance.
@@ -55,7 +56,7 @@ class DCRGymEnv(gym.Env):
         self.partway_max = partway_max
         self.partway_traces = partway_traces or []
         self.partway_timelimit_factor = partway_timelimit_factor
-        self.partway_frontiers = [TraceFrontier(len(t)) for t in self.partway_traces]
+        self.partway_frontiers = [TraceFrontier(len(t), step=partway_step) for t in self.partway_traces]
         self._partway_rng = np.random.default_rng(partway_seed)  # separate from the agent's RNG
         self.start_type, self.prefix_len, self.partway_trace = "initial", 0, None
         self._episode_limit, self._episode_steps = None, 0
