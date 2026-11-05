@@ -202,4 +202,14 @@ The design notes are in `SpecialCourse/METHOD_NOTES.md`; the repo copy of that f
 Implemented (details in TESTS.md and CODE_ISSUES_AND_CHANGES.md): `--partway-starts {none,random,trace}`
 with `--partway-initial-share`, `--partway-prob`, `--partway-max`, `--partway-trace-file`,
 `--partway-timelimit-factor`; `--fix-dead-end` (D1). Reward not changed. Tests a-j PASS.
+Committed as 428a890 (not pushed).
 
+Smoke test, WSL, seed 1, 2,000 steps (2,048 taken), all 8 versions at w = 0.5, including chain 40
+trace mode: 8 of 8 OK with `~/check_5nov_ps.py`; masked runs 0 illegal steps; 0 dead ends; j stays 4
+(only 4-6 frontier episodes fit in one rollout, a move needs 20). Smoke files deleted.
+Weights on the chains: w = 0 and w = 1, same seed, trace mode, masked: the two trace CSVs are byte
+identical. The chains have no costs or durations, so w changes nothing: of the 72 chain 40 runs
+asked for, 48 would be exact copies, and cost and duration of accepted cases are 0 there.
+Sweep script `~/sweeps_5nov_ps.sh` (80 runs; `--w05-only`: 32) ready, not started.
+
+Decision (user, 5 Nov): chain 40 at w = 0.5 only, `~/sweeps_5nov_ps.sh --w05-only`, 32 runs (24 on chain 40, 8 on chain 20).

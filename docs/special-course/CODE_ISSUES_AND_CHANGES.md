@@ -42,6 +42,8 @@ Commit dbd7c49, branch feature/cost-roles. Line numbers as of 21 Oct.
 
 ## Switches added (24 Oct, all off by default; tests in TESTS.md)
 
+Baseline for all later Study 1 experiments (decision 5 Nov): `--shaping-fix --gamma 1.0 --fix-false-accept --truncation-fix --fix-dead-end`, weights (w, 1 - w). Sofía's behaviour stays the default with no flags.
+
 | Switch | Fixes | Files |
 | --- | --- | --- |
 | `FIX_FALSE_ACCEPT=1` (adapter env; `run_local.py --fix-false-accept`) | A3 | node-adapter/src/server.ts (/action), dist/server.mjs rebuilt |
