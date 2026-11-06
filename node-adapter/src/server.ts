@@ -60,6 +60,21 @@ const FIX_FINAL_STEP   = process.env.FIX_FINAL_STEP === "1";
 const SHAPING_FIX      = process.env.SHAPING_FIX === "1";
 const SHAPING_GAMMA    = Number(process.env.SHAPING_GAMMA || 0.99);
 const SHAPING_PROGRESS = process.env.SHAPING_NO_PROGRESS !== "1";
+// DEFAULT_DURATION=X (X > 0): an event with no duration in the graph gets duration X. A stated
+//   duration, including 0, stays as it is. Unset = no change. The reward divides durations by the
+//   largest one in the graph, so if no event has a duration the reward does not depend on X.
+const DEFAULT_DURATION = process.env.DEFAULT_DURATION ? Number(process.env.DEFAULT_DURATION) : null;
+if (DEFAULT_DURATION !== null && !(DEFAULT_DURATION > 0)) {
+  console.error(`DEFAULT_DURATION must be a number above 0, got "${process.env.DEFAULT_DURATION}"`);
+  process.exit(1);
+}
+const applyDefaultDuration = (g: typeof graph) => {
+  if (DEFAULT_DURATION === null) return;
+  for (const event of g.events) {
+    if (g.durationMap[event] === undefined) g.durationMap[event] = DEFAULT_DURATION;
+  }
+};
+applyDefaultDuration(graph);
 
 const executedInEpisode = new Set<string>();
 // Tracks which pending events have been resolved at least once this episode.
@@ -410,6 +425,7 @@ app.post("/load", (req, res) => {
       return res.status(400).json({ ok: false, error: "xml string required" });
     }
     graph = xmlToDCR(xml);
+    applyDefaultDuration(graph);
     env = new RLDCREnvironment(graph);
     episodeSteps = 0;
     illegalTracesCount = 0;
@@ -466,4 +482,5 @@ app.listen(PORT, () => {
   console.log(`BUDGET_IN_MASK:            ${BUDGET_IN_MASK}`);
   console.log(`FIX_FINAL_STEP:            ${FIX_FINAL_STEP}`);
   console.log(`SHAPING_FIX:               ${SHAPING_FIX}${SHAPING_FIX ? ` (gamma ${SHAPING_GAMMA}, progress term ${SHAPING_PROGRESS ? "on" : "off"})` : ""}`);
+  console.log(`DEFAULT_DURATION:          ${DEFAULT_DURATION ?? "off"}`);
 });

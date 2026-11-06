@@ -55,6 +55,7 @@ Baseline for all later Study 1 experiments (decision 5 Nov): `--shaping-fix --ga
 | `--fix-dead-end` (`train_agent.py`, `run_local.py`), 5 Nov | D1 | dcr_env.py step() |
 | `--partway-starts` and its options (`train_agent.py`, `run_local.py`), 5 Nov | E1.4b | generation.ts replayPrefix; server.ts new `/replay` route (`/reset` and `/action` unchanged); node_connector.py; dcr_env.py reset(), step(); new src/envs/partway.py; train_agent.py callback |
 | `--gamma` (`train_agent.py`, `run_local.py`), 3 Nov | (discount factor, default 0.99 = hers) | train_agent.py train(); run_local.py tag `g<gamma>` |
+| `DEFAULT_DURATION=X` (adapter env; `run_local.py --default-duration X`), 6 Nov; not part of the baseline | Events with no duration (the synthetic chains; `analysis/Graph_costs_durations.md`) get duration X; a stated duration, including 0, stays | server.ts applyDefaultDuration (start-up and /load); run_local.py tag `defDur<X>`; test k |
 
 With all switches off, a 2,048-step run is identical row for row to commit fe01d1c (test a).
 A run with any switch on gets a tag in its id (`masked`, `fixA2A3B1`, `shapeFix`, `g1p0`, ...).

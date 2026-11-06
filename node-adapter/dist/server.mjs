@@ -415,6 +415,20 @@ var FIX_FINAL_STEP = process.env.FIX_FINAL_STEP === "1";
 var SHAPING_FIX = process.env.SHAPING_FIX === "1";
 var SHAPING_GAMMA = Number(process.env.SHAPING_GAMMA || 0.99);
 var SHAPING_PROGRESS = process.env.SHAPING_NO_PROGRESS !== "1";
+var DEFAULT_DURATION = process.env.DEFAULT_DURATION ? Number(process.env.DEFAULT_DURATION) : null;
+if (DEFAULT_DURATION !== null && !(DEFAULT_DURATION > 0)) {
+  console.error(`DEFAULT_DURATION must be a number above 0, got "${process.env.DEFAULT_DURATION}"`);
+  process.exit(1);
+}
+var applyDefaultDuration = (g) => {
+  if (DEFAULT_DURATION === null)
+    return;
+  for (const event of g.events) {
+    if (g.durationMap[event] === void 0)
+      g.durationMap[event] = DEFAULT_DURATION;
+  }
+};
+applyDefaultDuration(graph);
 var executedInEpisode = /* @__PURE__ */ new Set();
 var firstResolvedInEpisode = /* @__PURE__ */ new Set();
 var lastResult = null;
@@ -705,6 +719,7 @@ app.post("/load", (req, res) => {
       return res.status(400).json({ ok: false, error: "xml string required" });
     }
     graph = xmlToDCR(xml);
+    applyDefaultDuration(graph);
     env = new RLDCREnvironment(graph);
     episodeSteps = 0;
     illegalTracesCount = 0;
@@ -754,4 +769,5 @@ app.listen(PORT, () => {
   console.log(`BUDGET_IN_MASK:            ${BUDGET_IN_MASK}`);
   console.log(`FIX_FINAL_STEP:            ${FIX_FINAL_STEP}`);
   console.log(`SHAPING_FIX:               ${SHAPING_FIX}${SHAPING_FIX ? ` (gamma ${SHAPING_GAMMA}, progress term ${SHAPING_PROGRESS ? "on" : "off"})` : ""}`);
+  console.log(`DEFAULT_DURATION:          ${DEFAULT_DURATION ?? "off"}`);
 });

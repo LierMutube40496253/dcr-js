@@ -16,7 +16,7 @@ from run_local import wait_for_adapter, stop_process, adapter_answers  # noqa: E
 
 THESIS_ENV = {"MAX_EPISODE_STEPS": "300", "STEP_PENALTY": "-1.5"}
 SWITCH_VARS = ("FIX_FALSE_ACCEPT", "BUDGET_IN_MASK", "FIX_FINAL_STEP", "SHAPING_FIX", "SHAPING_GAMMA",
-               "SHAPING_NO_PROGRESS", "EXPERT_BUDGET_K")
+               "SHAPING_NO_PROGRESS", "EXPERT_BUDGET_K", "DEFAULT_DURATION")
 
 
 @contextmanager

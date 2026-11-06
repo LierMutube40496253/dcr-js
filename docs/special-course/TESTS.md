@@ -90,6 +90,13 @@ python scripts/special_course_tests/test_i_prefix_replay.py
 #    <= 0.15 when below the start value, limits, other prefix lengths ignored, geometric offset,
 #    --partway-step), then through the environment on Synthetic_chain_40. Port 5020, a few seconds.
 python scripts/special_course_tests/test_j_frontier.py
+
+# k. --default-duration (adapter DEFAULT_DURATION): off, Synthetic_chain_20 has no durations. X = 1 and
+#    X = 7: every event gets X, each step's reward is 0.5 lower at weights (0.5, 0.5), whatever X is, and
+#    the case duration is 5 x X. One duration removed from the Expense Report: only that event gets X.
+#    Loan_Application_Diaz: a stated 0 stays. /load applies it too; X = 0 stops the adapter. Port 5021,
+#    under a minute. "Nothing changes when off" is test a.
+python scripts/special_course_tests/test_k_default_duration.py
 ```
 
 ## Results, 24 Oct 2026 (Windows .venv; c also run in WSL .venv-linux with identical numbers)

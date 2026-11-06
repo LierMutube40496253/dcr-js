@@ -65,6 +65,8 @@ def switch_tag(args) -> str:
         parts.append("shapeFixNoProg" if args.no_progress else "shapeFix")
     if args.gamma != 0.99:
         parts.append(f"g{float(args.gamma)}".replace(".", "p"))
+    if args.default_duration is not None:
+        parts.append(f"defDur{args.default_duration:g}".replace(".", "p"))
     if args.partway_starts != "none":
         parts.append("ps" + args.partway_starts.capitalize() + (f"Step{args.partway_step}" if args.partway_step != 1 else ""))
     return "_".join(parts)
@@ -144,6 +146,9 @@ def run_one(args, xml: Path, seed: int, alpha: float, eps: float) -> bool:
         if on:
             env[name] = "1"
     env["SHAPING_GAMMA"] = str(args.gamma)  # read by the adapter only with SHAPING_FIX
+    env.pop("DEFAULT_DURATION", None)
+    if args.default_duration is not None:
+        env["DEFAULT_DURATION"] = str(args.default_duration)
     # Unbuffered UTF-8 output so the log is live and Windows code pages cannot crash prints
     env["PYTHONUNBUFFERED"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
@@ -260,6 +265,9 @@ def main():
     parser.add_argument("--shaping-fix", action="store_true",
                         help="adapter SHAPING_FIX=1: reward follows the objective (cost/duration "
                              "penalties + potential-based progress, +100 on acceptance; covers A1)")
+    parser.add_argument("--default-duration", type=float, default=None, metavar="X",
+                        help="adapter DEFAULT_DURATION=X: events with no duration get duration X "
+                             "(stated durations, including 0, stay; default off)")
     parser.add_argument("--no-progress", action="store_true",
                         help="with --shaping-fix: adapter SHAPING_NO_PROGRESS=1 (no progress term)")
     parser.add_argument("--gamma", type=float, default=0.99,
@@ -278,6 +286,8 @@ def main():
     args = parser.parse_args()
     if args.no_progress and not args.shaping_fix:
         parser.error("--no-progress only applies with --shaping-fix")
+    if args.default_duration is not None and not args.default_duration > 0:
+        parser.error("--default-duration must be above 0")
     if args.partway_step != 1 and args.partway_starts != "trace":
         parser.error("--partway-step only applies with --partway-starts trace")
     if args.weights_sweep and args.pairs is not None:
