@@ -20,13 +20,26 @@ if __package__ is None:
 
 from envs.dcr_env import DCRGymEnv
 from envs.partway import load_traces
+from agents.lagrange import lagrange_update
 
 
 class StepDebugCallback(BaseCallback):
     """Per-step debug trace: actions, rewards, and all reward components."""
 
-    def __init__(self, env_ref, csv_path: Path, log_every: int = 500, verbose: int = 0):
+    def __init__(self, env_ref, csv_path: Path, log_every: int = 500, verbose: int = 0,
+                 violation_fix: bool = False, node_url: str = "", lagrange: tuple | None = None):
         super().__init__(verbose)
+        # E1.8: violation columns only with --violation-fix; lagrange = (lambda_0, lr) or None
+        self.violation_fix = violation_fix
+        self.node_url = node_url
+        self.lagrange = lagrange
+        self.lam = lagrange[0] if lagrange else None
+        self._rollout_steps = 0
+        self._rollout_violations = 0
+        self._rollouts = 0
+        self.lagrange_csv_path = csv_path.with_name(csv_path.name.replace("train_trace_", "lagrange_"))
+        self._lagrange_file = None
+        self._lagrange_writer = None
         self.env_ref = env_ref
         self.csv_path = csv_path
         self.log_every = log_every
@@ -88,9 +101,18 @@ class StepDebugCallback(BaseCallback):
                 "expert_budget_remaining",
                 "expert_budget_initial",
             ] + (["dead_end"] if self.log_dead_ends else [])
-              + (["start_type", "prefix_len", "partway_trace", "partway_j"] if self.log_partway else []),
+              + (["start_type", "prefix_len", "partway_trace", "partway_j"] if self.log_partway else [])
+              + (["violation", "violation_price"] if self.violation_fix else []),
         )
         self._writer.writeheader()
+        if self.lagrange:
+            self._set_price(self.lam)
+            self._lagrange_file = open(self.lagrange_csv_path, "w", newline="")
+            self._lagrange_writer = csv.writer(self._lagrange_file)
+            self._lagrange_writer.writerow(["global_timestep", "rollout", "steps", "violations",
+                                            "violations_per_step", "lambda"])
+            self._lagrange_writer.writerow([0, 0, 0, 0, "", self.lam])
+            self._lagrange_file.flush()
         if self.log_partway and self.env_ref.partway_frontiers:
             self._frontier_file = open(self.frontier_csv_path, "w", newline="")
             self._frontier_writer = csv.writer(self._frontier_file)
@@ -133,8 +155,10 @@ class StepDebugCallback(BaseCallback):
         base_mapped = engine_result.get("baseMapped", None)
         intercepted_reason = engine_result.get("interceptedReason", "")
         # dcr_illegal and budget_block both have baseMapped==-10; keep the two counts separate.
-        if base_mapped == -10 and intercepted_reason != "budget_block":
+        if (base_mapped == -10 and intercepted_reason != "budget_block") or intercepted_reason == "violation":
             self._ep_illegal_count += 1
+        self._rollout_steps += 1
+        self._rollout_violations += intercepted_reason == "violation"
         if intercepted_reason == "budget_block":
             self._ep_budget_block_count += 1
         
@@ -194,6 +218,9 @@ class StepDebugCallback(BaseCallback):
                 self._frontier_writer.writerow([int(self.num_timesteps), self.episode_idx, trace, j_old, j_new, rate])
                 self._frontier_file.flush()
                 self.logger.record(f"partway/j_trace{trace}", j_new)
+        if self.violation_fix:
+            row["violation"] = bool(engine_result.get("violation", False))
+            row["violation_price"] = engine_result.get("violationPrice", "")
         self._writer.writerow(row)
 
         if (self.num_timesteps % self.log_every == 0) or done:
@@ -238,7 +265,30 @@ class StepDebugCallback(BaseCallback):
 
         return True
 
+    def _set_price(self, price: float) -> None:
+        import requests
+        r = requests.post(f"{self.node_url}/violation_price", json={"price": price}, timeout=10)
+        if r.status_code != 200:
+            raise RuntimeError(f"/violation_price answered {r.status_code}: {r.text}")
+
+    def _on_rollout_end(self) -> None:
+        # E1.8 Lagrangian: one multiplier update per rollout, used as the price from the next rollout on
+        if self.lagrange:
+            self._rollouts += 1
+            rate = self._rollout_violations / self._rollout_steps if self._rollout_steps else 0.0
+            self.lam = lagrange_update(self.lam, self.lagrange[1], self._rollout_violations, self._rollout_steps)
+            self._set_price(self.lam)
+            self._lagrange_writer.writerow([int(self.num_timesteps), self._rollouts, self._rollout_steps,
+                                            self._rollout_violations, round(rate, 6), round(self.lam, 6)])
+            self._lagrange_file.flush()
+            self.logger.record("lagrange/lambda", self.lam)
+            self.logger.record("lagrange/violations_per_step", rate)
+        self._rollout_steps = 0
+        self._rollout_violations = 0
+
     def _on_training_end(self) -> None:
+        if self._lagrange_file is not None:
+            self._lagrange_file.close()
         if self._csv_file is not None:
             self._csv_file.close()
         if self._frontier_file is not None:
@@ -268,6 +318,8 @@ def train(
     partway_traces: list | None = None,
     partway_timelimit_factor: float | None = None,
     partway_step: int = 1,
+    violation_fix: bool = False,
+    lagrange: tuple | None = None,
 ):
     ts = time.strftime("%Y%m%dT%H%M%S")
     run_name = f"exp_{exp_id}_{ts}"
@@ -300,6 +352,10 @@ def train(
             print(f"Partway traces: {partway_traces}")
             print(f"Partway time limit factor: {partway_timelimit_factor}")
             print(f"Partway step: {partway_step}")
+    if violation_fix:
+        print(f"Violations:     priced as legal steps plus a violation price (VIOLATION_FIX)")
+    if lagrange:
+        print(f"Lagrangian:     lambda_0 {lagrange[0]}, lr {lagrange[1]}, target 0 violations per step")
     print(f"---------------------------")
 
     logs_dir = out_dir.parent / "scripts" / "logs"
@@ -345,7 +401,8 @@ def train(
     )
 
     callback = StepDebugCallback(
-        env_ref=env_ref, csv_path=train_trace_csv, log_every=500
+        env_ref=env_ref, csv_path=train_trace_csv, log_every=500,
+        violation_fix=violation_fix, node_url=node_url, lagrange=lagrange,
     )
     model.learn(
         total_timesteps=total_timesteps,
@@ -401,8 +458,17 @@ if __name__ == "__main__":
                         help="trace mode: partway episode limit = F x (events left in trace) + 10 (default off)")
     parser.add_argument("--partway-step", type=int, default=1,
                         help="trace mode: events the frontier moves per stage")
+    parser.add_argument("--violation-fix", action="store_true",
+                        help="E1.8: the adapter runs with VIOLATION_FIX=1; log violation columns")
+    parser.add_argument("--lagrange", action="store_true",
+                        help="E1.8: violation price = Lagrange multiplier, updated after each rollout")
+    parser.add_argument("--lagrange-init", type=float, default=1.0, help="lambda_0 (Ray et al. 2019)")
+    parser.add_argument("--lagrange-lr", type=float, default=3.0,
+                        help="multiplier learning rate on violations per step (see agents/lagrange.py)")
 
     args = parser.parse_args()
+    if args.lagrange and not args.violation_fix:
+        parser.error("--lagrange needs --violation-fix")
     traces = None
     if args.partway_starts == "trace":
         traces = load_traces(args.partway_trace_file, args.partway_graph)
@@ -425,4 +491,6 @@ if __name__ == "__main__":
         partway_traces=traces,
         partway_timelimit_factor=args.partway_timelimit_factor,
         partway_step=args.partway_step,
+        violation_fix=args.violation_fix,
+        lagrange=(args.lagrange_init, args.lagrange_lr) if args.lagrange else None,
     )

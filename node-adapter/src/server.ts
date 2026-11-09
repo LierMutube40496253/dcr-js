@@ -75,6 +75,23 @@ const applyDefaultDuration = (g: typeof graph) => {
   }
 };
 applyDefaultDuration(graph);
+// VIOLATION_FIX=1 (E1.8; needs SHIELD_DISABLED=1 and SHAPING_FIX=1): a forbidden event that the
+//   disabled shield lets through is priced like a legal step (cost, duration, progress term, +100 if
+//   the new marking accepts) minus the violation price. It uses up the Expert budget like a legal
+//   Expert step and is logged as "violation". Off = her RL-only path: a flat -10, nothing else.
+//   VIOLATION_PRICE = starting price (default 10); POST /violation_price changes it while running
+//   (Lagrangian variant).
+const SHIELD_DISABLED = process.env.SHIELD_DISABLED === "1";
+const VIOLATION_FIX = process.env.VIOLATION_FIX === "1";
+let violationPrice = process.env.VIOLATION_PRICE ? Number(process.env.VIOLATION_PRICE) : 10;
+if (VIOLATION_FIX && !(SHIELD_DISABLED && SHAPING_FIX)) {
+  console.error("VIOLATION_FIX=1 needs SHIELD_DISABLED=1 and SHAPING_FIX=1");
+  process.exit(1);
+}
+if (!(Number.isFinite(violationPrice) && violationPrice >= 0)) {
+  console.error(`VIOLATION_PRICE must be a number >= 0, got "${process.env.VIOLATION_PRICE}"`);
+  process.exit(1);
+}
 
 const executedInEpisode = new Set<string>();
 // Tracks which pending events have been resolved at least once this episode.
@@ -215,6 +232,19 @@ app.post("/replay", (req, res) => {
   }
 });
 
+// E1.8 (VIOLATION_FIX only): set the price of a violation, e.g. the Lagrange multiplier after a rollout.
+app.post("/violation_price", (req, res) => {
+  if (!VIOLATION_FIX) {
+    return res.status(409).json({ ok: false, error: "only with VIOLATION_FIX=1" });
+  }
+  const price = Number(req.body?.price);
+  if (!(Number.isFinite(price) && price >= 0)) {
+    return res.status(400).json({ ok: false, error: "price must be a number >= 0" });
+  }
+  violationPrice = price;
+  res.json({ ok: true, violationPrice });
+});
+
 app.get("/state", (_req, res) => {
   try {
     const state = getState();
@@ -324,6 +354,9 @@ app.post("/action", (req, res) => {
     // Ensure reward.ts uses the acceptance mode selected above.
     // Pass stateBefore so the progress signal can identify which pendings were resolved.
     const rewardInput: any = { ...result, accepting, done: accepting, stateBefore };
+    // E1.8: an executed forbidden event (shield off) is priced as a legal step below.
+    const isViolation = VIOLATION_FIX && SHIELD_DISABLED && result.info?.compliant === false;
+    if (isViolation) rewardInput.reward = 0;
     // Dead end (used by SHAPING_FIX only): not accepting and no event enabled any more.
     if (SHAPING_FIX) rewardInput.deadEnd = !accepting && getValidActions().length === 0;
 
@@ -337,7 +370,7 @@ app.post("/action", (req, res) => {
     const isLegal = result.reward !== -10;
 
     // Decrement Expert budget on a legally executed Expert action.
-    if (isLegal && chosenRole === "Expert" && EXPERT_BUDGET_K !== null && expertBudgetRemaining !== null) {
+    if ((isLegal || isViolation) && chosenRole === "Expert" && EXPERT_BUDGET_K !== null && expertBudgetRemaining !== null) {
       expertBudgetRemaining = Math.max(0, expertBudgetRemaining - 1);
     }
 
@@ -362,18 +395,18 @@ app.post("/action", (req, res) => {
     const isLegalNonTerminal = baseMapped === 1;
     const isIllegal = baseMapped === -10;
     // budget_block never reaches this path, so isIllegal here always means dcr_illegal.
-    const interceptedReason = isLegal ? null : "dcr_illegal";
+    const interceptedReason = isViolation ? "violation" : isLegal ? null : "dcr_illegal";
 
     // Track illegal traces for convergence analysis (dcr_illegal only, not budget_block)
-    if (isIllegal) {
+    if (isIllegal || isViolation) {
       illegalTracesCount += 1;
     }
     
     // With FIX_FINAL_STEP the accepting step pays the step penalty too (A1).
     // With SHAPING_FIX no step pays it.
-    const effectiveReward = !SHAPING_FIX && (isLegalNonTerminal || (FIX_FINAL_STEP && baseMapped === 100))
+    const effectiveReward = (!SHAPING_FIX && (isLegalNonTerminal || (FIX_FINAL_STEP && baseMapped === 100))
       ? stepReward + STEP_PENALTY
-      : stepReward;
+      : stepReward) - (isViolation ? violationPrice : 0);
 
     const maxStepReached = episodeSteps >= MAX_EPISODE_STEPS;
     const effectiveDone = accepting || maxStepReached;
@@ -404,6 +437,7 @@ app.post("/action", (req, res) => {
       expertBudgetRemaining,
       expertBudgetInitial: EXPERT_BUDGET_K,
       numBudgetBlocks,
+      ...(VIOLATION_FIX ? { violation: isViolation, violationPrice } : {}),
     };
 
     lastResult = { ...augmentedResult, chosenRole };
@@ -483,4 +517,6 @@ app.listen(PORT, () => {
   console.log(`FIX_FINAL_STEP:            ${FIX_FINAL_STEP}`);
   console.log(`SHAPING_FIX:               ${SHAPING_FIX}${SHAPING_FIX ? ` (gamma ${SHAPING_GAMMA}, progress term ${SHAPING_PROGRESS ? "on" : "off"})` : ""}`);
   console.log(`DEFAULT_DURATION:          ${DEFAULT_DURATION ?? "off"}`);
+  console.log(`SHIELD_DISABLED:           ${SHIELD_DISABLED}`);
+  console.log(`VIOLATION_FIX:             ${VIOLATION_FIX}${VIOLATION_FIX ? ` (price ${violationPrice})` : ""}`);
 });

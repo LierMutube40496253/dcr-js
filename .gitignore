@@ -32,6 +32,7 @@ tmp_cluster_logs/
 dcr_tensorboard*/
 train_trace_exp_*.csv
 partway_frontier_exp_*.csv
+lagrange_exp_*.csv
 
 # Compiled output (regenerate with npm build)
 node-adapter/dist/

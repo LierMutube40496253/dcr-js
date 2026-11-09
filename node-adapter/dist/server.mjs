@@ -429,6 +429,17 @@ var applyDefaultDuration = (g) => {
   }
 };
 applyDefaultDuration(graph);
+var SHIELD_DISABLED = process.env.SHIELD_DISABLED === "1";
+var VIOLATION_FIX = process.env.VIOLATION_FIX === "1";
+var violationPrice = process.env.VIOLATION_PRICE ? Number(process.env.VIOLATION_PRICE) : 10;
+if (VIOLATION_FIX && !(SHIELD_DISABLED && SHAPING_FIX)) {
+  console.error("VIOLATION_FIX=1 needs SHIELD_DISABLED=1 and SHAPING_FIX=1");
+  process.exit(1);
+}
+if (!(Number.isFinite(violationPrice) && violationPrice >= 0)) {
+  console.error(`VIOLATION_PRICE must be a number >= 0, got "${process.env.VIOLATION_PRICE}"`);
+  process.exit(1);
+}
 var executedInEpisode = /* @__PURE__ */ new Set();
 var firstResolvedInEpisode = /* @__PURE__ */ new Set();
 var lastResult = null;
@@ -542,6 +553,17 @@ app.post("/replay", (req, res) => {
     res.status(500).json({ ok: false, error: String(err) });
   }
 });
+app.post("/violation_price", (req, res) => {
+  if (!VIOLATION_FIX) {
+    return res.status(409).json({ ok: false, error: "only with VIOLATION_FIX=1" });
+  }
+  const price = Number(req.body?.price);
+  if (!(Number.isFinite(price) && price >= 0)) {
+    return res.status(400).json({ ok: false, error: "price must be a number >= 0" });
+  }
+  violationPrice = price;
+  res.json({ ok: true, violationPrice });
+});
 app.get("/state", (_req, res) => {
   try {
     const state = getState();
@@ -633,6 +655,9 @@ app.post("/action", (req, res) => {
     const goalReached = GOAL_LABEL.length > 0 && label === GOAL_LABEL;
     const accepting = STRICT_GOAL_TERMINATION ? structuralAccepting && goalReached : structuralAccepting;
     const rewardInput = { ...result, accepting, done: accepting, stateBefore };
+    const isViolation = VIOLATION_FIX && SHIELD_DISABLED && result.info?.compliant === false;
+    if (isViolation)
+      rewardInput.reward = 0;
     if (SHAPING_FIX)
       rewardInput.deadEnd = !accepting && getValidActions().length === 0;
     const baseCost = graph.costMap?.[action] ?? 0;
@@ -641,7 +666,7 @@ app.post("/action", (req, res) => {
     const eventCost = mult ? baseCost * mult.costMultiplier : graph.costMap?.[action];
     const eventDuration = mult ? baseDuration * mult.durationMultiplier : graph.durationMap?.[action];
     const isLegal = result.reward !== -10;
-    if (isLegal && chosenRole === "Expert" && EXPERT_BUDGET_K !== null && expertBudgetRemaining !== null) {
+    if ((isLegal || isViolation) && chosenRole === "Expert" && EXPERT_BUDGET_K !== null && expertBudgetRemaining !== null) {
       expertBudgetRemaining = Math.max(0, expertBudgetRemaining - 1);
     }
     const shieldDisabled = process.env.SHIELD_DISABLED === "1";
@@ -669,11 +694,11 @@ app.post("/action", (req, res) => {
     );
     const isLegalNonTerminal = baseMapped === 1;
     const isIllegal = baseMapped === -10;
-    const interceptedReason = isLegal ? null : "dcr_illegal";
-    if (isIllegal) {
+    const interceptedReason = isViolation ? "violation" : isLegal ? null : "dcr_illegal";
+    if (isIllegal || isViolation) {
       illegalTracesCount += 1;
     }
-    const effectiveReward = !SHAPING_FIX && (isLegalNonTerminal || FIX_FINAL_STEP && baseMapped === 100) ? stepReward + STEP_PENALTY : stepReward;
+    const effectiveReward = (!SHAPING_FIX && (isLegalNonTerminal || FIX_FINAL_STEP && baseMapped === 100) ? stepReward + STEP_PENALTY : stepReward) - (isViolation ? violationPrice : 0);
     const maxStepReached = episodeSteps >= MAX_EPISODE_STEPS;
     const effectiveDone = accepting || maxStepReached;
     const augmentedResult = {
@@ -701,7 +726,8 @@ app.post("/action", (req, res) => {
       interceptedReason,
       expertBudgetRemaining,
       expertBudgetInitial: EXPERT_BUDGET_K,
-      numBudgetBlocks
+      numBudgetBlocks,
+      ...VIOLATION_FIX ? { violation: isViolation, violationPrice } : {}
     };
     lastResult = { ...augmentedResult, chosenRole };
     const pairs2 = getEventRolePairs();
@@ -770,4 +796,6 @@ app.listen(PORT, () => {
   console.log(`FIX_FINAL_STEP:            ${FIX_FINAL_STEP}`);
   console.log(`SHAPING_FIX:               ${SHAPING_FIX}${SHAPING_FIX ? ` (gamma ${SHAPING_GAMMA}, progress term ${SHAPING_PROGRESS ? "on" : "off"})` : ""}`);
   console.log(`DEFAULT_DURATION:          ${DEFAULT_DURATION ?? "off"}`);
+  console.log(`SHIELD_DISABLED:           ${SHIELD_DISABLED}`);
+  console.log(`VIOLATION_FIX:             ${VIOLATION_FIX}${VIOLATION_FIX ? ` (price ${violationPrice})` : ""}`);
 });

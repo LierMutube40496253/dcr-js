@@ -97,6 +97,20 @@ python scripts/special_course_tests/test_j_frontier.py
 #    Loan_Application_Diaz: a stated 0 stays. /load applies it too; X = 0 stops the adapter. Port 5021,
 #    under a minute. "Nothing changes when off" is test a.
 python scripts/special_course_tests/test_k_default_duration.py
+
+# l. E1.8 VIOLATION_FIX (shield off, new reward, Expense, weights (0.5, 0.5)): off, a violation that ends
+#    accepting gets a flat -10 (her RL-only path); on, it gets the legal-step reward (cost, duration,
+#    progress, +100) minus 10 and is labelled "violation"; legal steps unchanged; /violation_price changes
+#    the price (400 for a negative one, 409 without the switch); an Expert violation uses the Expert budget
+#    only with the switch on (LoanApp, k = 2); VIOLATION_FIX without SHIELD_DISABLED stops the adapter.
+#    Port 5023, under a minute.
+python scripts/special_course_tests/test_l_violations.py
+
+# m. E1.8 Lagrangian: the update rule max(0, lambda + lr x violations per step), then a 4,096-step PPO run
+#    on the Expense Report with --shield-off --violation-fix --lagrange: the multiplier log follows the
+#    rule and each rollout's steps used the multiplier set after the previous rollout. Port 5024, about a
+#    minute; its files are deleted afterwards.
+python scripts/special_course_tests/test_m_lagrange.py
 ```
 
 ## Results, 24 Oct 2026 (Windows .venv; c also run in WSL .venv-linux with identical numbers)

@@ -69,6 +69,16 @@ def switch_tag(args) -> str:
         parts.append(f"defDur{args.default_duration:g}".replace(".", "p"))
     if args.partway_starts != "none":
         parts.append("ps" + args.partway_starts.capitalize() + (f"Step{args.partway_step}" if args.partway_step != 1 else ""))
+    # E1.8: shieldOff = her RL-only mode; violFix = violations priced as legal steps; then the price:
+    # vp<X> for a fixed price other than 10, lagI<init>L<lr> for the Lagrangian multiplier
+    if args.shield_off:
+        parts.append("shieldOff")
+    if args.violation_fix:
+        parts.append("violFix")
+        if args.lagrange:
+            parts.append(f"lagI{args.lagrange_init:g}L{args.lagrange_lr:g}".replace(".", "p"))
+        elif args.violation_price != 10:
+            parts.append(f"vp{args.violation_price:g}".replace(".", "p"))
     return "_".join(parts)
 
 
@@ -149,6 +159,13 @@ def run_one(args, xml: Path, seed: int, alpha: float, eps: float) -> bool:
     env.pop("DEFAULT_DURATION", None)
     if args.default_duration is not None:
         env["DEFAULT_DURATION"] = str(args.default_duration)
+    for name in ("SHIELD_DISABLED", "VIOLATION_FIX", "VIOLATION_PRICE"):
+        env.pop(name, None)
+    if args.shield_off:
+        env["SHIELD_DISABLED"] = "1"
+    if args.violation_fix:
+        env["VIOLATION_FIX"] = "1"
+        env["VIOLATION_PRICE"] = str(args.lagrange_init if args.lagrange else args.violation_price)
     # Unbuffered UTF-8 output so the log is live and Windows code pages cannot crash prints
     env["PYTHONUNBUFFERED"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
@@ -201,6 +218,11 @@ def run_one(args, xml: Path, seed: int, alpha: float, eps: float) -> bool:
                         train_cmd += ["--partway-timelimit-factor", str(args.partway_timelimit_factor)]
                     if args.partway_step != 1:
                         train_cmd += ["--partway-step", str(args.partway_step)]
+                if args.violation_fix:
+                    train_cmd += ["--violation-fix"]
+                if args.lagrange:
+                    train_cmd += ["--lagrange", "--lagrange-init", str(args.lagrange_init),
+                                  "--lagrange-lr", str(args.lagrange_lr)]
                 print("Launching trainer:", " ".join(train_cmd), flush=True)
                 ret = subprocess.run(
                     train_cmd,
@@ -283,7 +305,27 @@ def main():
     parser.add_argument("--partway-trace-file", type=Path, default=None)
     parser.add_argument("--partway-timelimit-factor", type=float, default=None)
     parser.add_argument("--partway-step", type=int, default=1)
+    # E1.8 safe-RL variants (all off by default)
+    parser.add_argument("--shield-off", action="store_true",
+                        help="adapter SHIELD_DISABLED=1 (her RL-only mode): forbidden events are executed")
+    parser.add_argument("--violation-fix", action="store_true",
+                        help="adapter VIOLATION_FIX=1: a violation is priced like a legal step plus the "
+                             "violation price; needs --shield-off and --shaping-fix")
+    parser.add_argument("--violation-price", type=float, default=10.0,
+                        help="fixed violation price with --violation-fix (default 10)")
+    parser.add_argument("--lagrange", action="store_true",
+                        help="with --violation-fix: the price is a Lagrange multiplier updated per rollout")
+    parser.add_argument("--lagrange-init", type=float, default=1.0)
+    parser.add_argument("--lagrange-lr", type=float, default=3.0)
     args = parser.parse_args()
+    if args.shield_off and args.algo == "maskable_ppo":
+        parser.error("--shield-off has no effect with masking (no forbidden event is ever chosen)")
+    if args.violation_fix and not (args.shield_off and args.shaping_fix):
+        parser.error("--violation-fix needs --shield-off and --shaping-fix")
+    if args.lagrange and not args.violation_fix:
+        parser.error("--lagrange needs --violation-fix")
+    if not args.violation_price >= 0 or not args.lagrange_init >= 0 or not args.lagrange_lr >= 0:
+        parser.error("--violation-price, --lagrange-init and --lagrange-lr must be >= 0")
     if args.no_progress and not args.shaping_fix:
         parser.error("--no-progress only applies with --shaping-fix")
     if args.default_duration is not None and not args.default_duration > 0:
