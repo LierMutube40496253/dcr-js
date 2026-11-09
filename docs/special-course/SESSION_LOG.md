@@ -248,3 +248,15 @@ Decision (user, 6 Nov): no gamma 0.999 test, keep gamma 1. Test instead whether 
 - On a chain X does not change the reward, because durations are divided by the largest: every event scores 1. So it acts as a step penalty of (1 - w): 0.5 per step at w = 0.5, none at w = 1.
 - Prepared, not started: `~/sweeps_defdur20.sh`, `~/check_defdur20.py`; chain 20, masked, no partway starts, w = 0.5, seeds 1-4, 100,000 steps, gamma 1, entropy 0.1, 4 runs, `FD_Synth20_masked_fixA2A3D1_shapeFix_g1p0_defDur1_s*`. Control, not rerun: `PS_Synth20_masked_fixA2A3D1_shapeFix_g1p0_s*`. Report: `analysis/e1_4b_decay_check.py <logs> "duration test"`.
 - Smoke test (seed 1, 6,000 steps, 2 runs OK, files deleted): control settings repeat the PS_ run in 6,144 of 6,144 rows; the default-duration run chooses the same actions in the 2,048 rows before the first update, with each reward 0.5 lower, and differs after. Chain 60/80 not started.
+
+Chain 20 default-duration test finished: 15:20-15:43 on 6 Nov (23 min), 4 of 4 OK with `~/check_defdur20.py`, at 0bb8e71. Results: `analysis/E1_4b_default_duration_results.md`.
+- Accepted from the initial marking, final 20%, seeds 1-4: 100, 100, 99.9, 100 (control 81.5, 88.7, 34.1, 85.6). Last-window steps per case 6.9 (control 94.1), entropy 0.86 (control 2.33). No dead ends.
+- The fall disappears at gamma 1 with a price of 0.5 per step. It matches gamma 0.99 on acceptance, with slightly longer cases (6.9 against 5.8). Entropy rose a little in the last window in seeds 2 and 3. Limits: 4 seeds, 100,000 steps.
+- Every non-chain graph has a price on every step at every w (except Loan_Application_Diaz "request loan"), so the fall is a chain problem among our graphs. Whether a much smaller price (0.0013-0.014 per step at w = 1 on LoanApp and Expense) is enough is untested.
+- Open decision: run chain 60/80 with `--default-duration 1` at w = 0.5. `~/sweeps_ps6080.sh` does not have the flag yet. Chain 60/80 not started.
+
+## 9 Nov 2026: chain 60/80 sweep updated; plan for E1.8 and E1.5
+- Decision (user): synthetic chains always run with `--default-duration 1` and at w = 0.5 only. `~/sweeps_ps6080.sh` now passes the flag to all four jobs (run ids gain `_defDur1`), and `~/check_ps6080.py` checks it on every row. It also has a `--smoke` mode. Smoke test (seed 1, 2,000 steps): 4 of 4 OK, files deleted. Still not started.
+- Script fix: a variable named PREFIX set before loading nvm stops nvm from loading (node missing, all runs fail at once). Renamed to RUN_PREFIX.
+- Privacy rule added to CLAUDE.md: no user messages or prompts stored verbatim; the session log keeps short summaries only.
+- Next: rerun chain 40 with `--default-duration 1` (PD_), then E1.8 (safe RL variants) and E1.5 (other algorithms). E1.8 checks of the shield-off path come before any code change.

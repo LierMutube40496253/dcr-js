@@ -52,5 +52,7 @@ baseline, and is noted in docs/special-course/.
 - Read docs/special-course/SESSION_LOG.md at the start of every session and append to it at the end.
 - Do not change her code's behaviour without a switch that keeps her version as default.
 - Do not commit or push without asking.
+- Privacy: never store the user's messages or prompts verbatim, in the repo or in any log or notes
+  file. The session log gets only short summaries of decisions and results, in our own words.
 - Windows machine: Python 3.12 venv in `dcr-gymnasium-agent/python/.venv`, Node 24, Yarn 1.
 - AGENTS.md is a symlink to this file.
