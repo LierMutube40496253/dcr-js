@@ -22,6 +22,16 @@ from envs.dcr_env import DCRGymEnv
 from envs.partway import load_traces
 from agents.lagrange import lagrange_update
 
+MASKED_ALGOS = ("maskable_ppo", "maskable_a2c", "maskable_dqn", "tabular_q")
+# E1.5 masked DQN: SB3 defaults (lr 1e-4, batch 32, train every 4 steps, 1 gradient step, Huber loss,
+# max grad norm 10, final epsilon 0.05, net 64x64) except where the default is tied to a much longer
+# run: replay buffer 100,000 (= the whole run), learning starts after 1,000 steps, target network
+# copied every 1,000 steps (default 10,000 would give 10 copies in the run), epsilon decays over 20%.
+DQN_SETTINGS = dict(learning_rate=1e-4, buffer_size=100_000, learning_starts=1_000, batch_size=32,
+                    train_freq=4, gradient_steps=1, target_update_interval=1_000,
+                    exploration_fraction=0.2, exploration_initial_eps=1.0, exploration_final_eps=0.05,
+                    max_grad_norm=10)
+
 
 class StepDebugCallback(BaseCallback):
     """Per-step debug trace: actions, rewards, and all reward components."""
@@ -335,6 +345,16 @@ def train(
     print(f"TB Log Dir:     {tb_log_dir}")
     if algo == "maskable_ppo":
         print(f"Policy:         MaskablePPO (adapter action mask)")
+    elif algo == "maskable_a2c":
+        print(f"Policy:         Masked A2C (MaskablePPO with the A2C settings of Huang et al. 2022)")
+        print(f"A2C settings:   n_steps 5, 1 epoch, full batch, gae_lambda 1, no advantage normalisation, "
+              f"RMSprop(alpha 0.99, eps 1e-5), lr 7e-4, vf_coef 0.5, max_grad_norm 0.5")
+    elif algo == "maskable_dqn":
+        print(f"Policy:         Masked DQN (invalid actions excluded in action choice and target max)")
+        print(f"DQN settings:   {DQN_SETTINGS}")
+    elif algo == "tabular_q":
+        print(f"Policy:         Tabular Q-learning with the action mask")
+        print(f"Q settings:     alpha 0.1, epsilon 1 -> 0.05 over the first 20% of steps, Q starts at 0")
     else:
         print(f"Policy:         PPO (no action masking)")
     if truncation_fix:
@@ -368,7 +388,7 @@ def train(
     def make_env(seed_offset: int):
         def _init():
             e = DCRGymEnv(node_url=node_url, truncation_fix=truncation_fix,
-                          dead_end_truncate=(algo == "maskable_ppo"), fix_dead_end=fix_dead_end,
+                          dead_end_truncate=(algo in MASKED_ALGOS), fix_dead_end=fix_dead_end,
                           partway_starts=partway_starts, partway_initial_share=partway_initial_share,
                           partway_prob=partway_prob, partway_max=partway_max, partway_traces=partway_traces,
                           partway_timelimit_factor=partway_timelimit_factor, partway_seed=seed + seed_offset,
@@ -384,30 +404,57 @@ def train(
     # env_ref points to the inner DCRGymEnv (unwrap Monitor → DCRGymEnv)
     env_ref = vec_env.envs[0].env
 
-    # --- PPO (standard, no action masking), or MaskablePPO with the same hyperparameters ---
-    if algo == "maskable_ppo":
-        from sb3_contrib import MaskablePPO  # masks come from DCRGymEnv.action_masks()
-        algo_cls = MaskablePPO
-    else:
-        algo_cls = PPO
-    model = algo_cls(
-        "MlpPolicy",
-        vec_env,
-        verbose=1,
-        tensorboard_log=str(tb_log_dir) if tb_log_dir and str(tb_log_dir) else None,
-        ent_coef=ent_coef,
-        seed=seed,
-        gamma=gamma,  # 0.99 = SB3 default (her runs)
-    )
-
     callback = StepDebugCallback(
         env_ref=env_ref, csv_path=train_trace_csv, log_every=500,
         violation_fix=violation_fix, node_url=node_url, lagrange=lagrange,
     )
+    tb = str(tb_log_dir) if tb_log_dir and str(tb_log_dir) else None
+
+    # E1.5 tabular Q-learning: own loop, same callback and trace CSV, TensorBoard log via SB3's logger
+    if algo == "tabular_q":
+        from stable_baselines3.common.logger import configure
+        from agents.tabular_q import TabularQ
+        logger = configure(str(Path(tb) / f"{run_name}_1") if tb else None, ["tensorboard"] if tb else [])
+        agent = TabularQ(env_ref, seed=seed, gamma=gamma)
+        agent.learn(total_timesteps, callback, logger)
+        model_path = out_dir / f"{algo}_{run_name}.json"
+        agent.save(model_path)
+        print(f"Tabular states visited: {len(agent.q)}")
+        print(f"Model saved to: {model_path}")
+        return model_path
+
+    # --- PPO (standard, no action masking), MaskablePPO with the same hyperparameters,
+    # masked A2C (MaskablePPO with A2C settings) or masked DQN ---
+    common = dict(verbose=1, tensorboard_log=tb, seed=seed, gamma=gamma)  # gamma 0.99 = SB3 default (her runs)
+    learn_kwargs = {}
+    if algo == "maskable_ppo":
+        from sb3_contrib import MaskablePPO  # masks come from DCRGymEnv.action_masks()
+        model = MaskablePPO("MlpPolicy", vec_env, ent_coef=ent_coef, **common)
+    elif algo == "maskable_a2c":
+        # A2C as a special case of PPO (Huang et al. 2022): one epoch on one full batch of a 5-step
+        # rollout (the ratio is 1, so clipping never acts), GAE off, no advantage normalisation, A2C's
+        # RMSprop; SB3 A2C defaults for lr, vf_coef, max_grad_norm and the log interval
+        import torch as th
+        from sb3_contrib import MaskablePPO
+        model = MaskablePPO("MlpPolicy", vec_env, ent_coef=ent_coef, n_steps=5, batch_size=5, n_epochs=1,
+                            learning_rate=7e-4, gae_lambda=1.0, normalize_advantage=False, vf_coef=0.5,
+                            max_grad_norm=0.5,
+                            policy_kwargs=dict(optimizer_class=th.optim.RMSprop,
+                                               optimizer_kwargs=dict(alpha=0.99, eps=1e-5, weight_decay=0)),
+                            **common)
+        learn_kwargs["log_interval"] = 100
+    elif algo == "maskable_dqn":
+        from agents.masked_dqn import MaskedDQN
+        model = MaskedDQN("MlpPolicy", vec_env, **DQN_SETTINGS, **common)
+        learn_kwargs["log_interval"] = 100
+    else:
+        model = PPO("MlpPolicy", vec_env, ent_coef=ent_coef, **common)
+
     model.learn(
         total_timesteps=total_timesteps,
         tb_log_name=run_name,
         callback=callback,
+        **learn_kwargs,
     )
 
     model_path = out_dir / f"{algo}_{run_name}.zip"
@@ -433,8 +480,10 @@ if __name__ == "__main__":
     )
     parser.add_argument("--ent-coef", type=float, default=0.01)
     parser.add_argument("--seed", type=int, default=1)
-    parser.add_argument("--algo", choices=["ppo", "maskable_ppo"], default="ppo",
-                        help="ppo = Sofía's unmasked PPO (default); maskable_ppo = sb3-contrib MaskablePPO")
+    parser.add_argument("--algo", choices=["ppo", "maskable_ppo", "maskable_a2c", "maskable_dqn", "tabular_q"],
+                        default="ppo",
+                        help="ppo = Sofía's unmasked PPO (default); maskable_ppo = sb3-contrib MaskablePPO; "
+                             "E1.5: maskable_a2c, maskable_dqn, tabular_q (all masked)")
     parser.add_argument("--truncation-fix", action="store_true",
                         help="issue A2: report the step limit as truncated, not terminated")
     parser.add_argument("--gamma", type=float, default=0.99,

@@ -111,6 +111,19 @@ python scripts/special_course_tests/test_l_violations.py
 #    rule and each rollout's steps used the multiplier set after the previous rollout. Port 5024, about a
 #    minute; its files are deleted afterwards.
 python scripts/special_course_tests/test_m_lagrange.py
+
+# n. E1.5 algorithms (all masked): masked max and the masked replay buffer (units); then 2,000 steps of
+#    masked A2C, masked DQN and tabular Q on the Expense Report: no forbidden action chosen, the saved
+#    models hold the intended settings (A2C: n_steps 5, 1 epoch, batch 5, gae_lambda 1, lr 7e-4, RMSprop;
+#    DQN: gamma 1, target every 1,000, buffer 100,000, learning starts 1,000), tabular visits at most the 17
+#    reachable markings. Port 5025, a few minutes; its files are deleted afterwards.
+python scripts/special_course_tests/test_n_algorithms.py
+
+# o. E1.5 exact optimum (node-adapter/scripts/exact_optimum.ts) against known results: Expense P2 at
+#    w = 0 and P1 at w = 1; LoanApp without roles = the MiniZinc point (1,560, 816); Mined 05 = the two
+#    MiniZinc points; LoanApp with roles: fastest (3,120, 408), cheapest (1,092, 1,632); chain 20 with
+#    default duration 1 at w = 0.5: 5 steps, objective 2.5. Under a minute.
+python scripts/special_course_tests/test_o_exact_optimum.py
 ```
 
 ## Results, 24 Oct 2026 (Windows .venv; c also run in WSL .venv-linux with identical numbers)
